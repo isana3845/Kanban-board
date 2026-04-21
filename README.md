@@ -1,5 +1,5 @@
 ## Стек:
-```text
+``text
 Фронт: Vue.js, CSS bootstrap
 Бэк: Python FastAPI, PostgreSQL, SQLAlchemy 
 
