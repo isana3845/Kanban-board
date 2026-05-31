@@ -8,138 +8,151 @@
 </head>
 <body>
 
-  <aside class="sidebar">
-
-    <div class="logo-circle"></div>
-
-    <nav class="nav-menu">
-      <div class="nav-item">
-        <button onclick="board()">☰</button>
-      </div>
-      
-      <div class="nav-item">
-        <button onclick="folder()">📁</button>
-      </div>
-
-      <div class="nav-item">
-        <button onclick="analytics()">📊</button>
-      </div>
-
-    </nav>
-  </aside>
-
-  <div class="main-container">
-    
-    <header class="header">
-      <h1>Канбан-доска</h1>
-
-      <div class="header-right">
-        <div class="search-box">
-          <button onclick="">🔍</button>
-          <input type="text" placeholder="Поиск">
+  <!-- СТРАНИЦА ВХОДА -->
+  <div id="loginPage" class="login-page">
+    <div class="login-card">
+      <h1>Вход в систему</h1>
+      <div class="login-sub">Канбан-доска · Управление задачами</div>
+      <form id="loginForm">
+        <div class="input-group">
+          <label>Электронная почта</label>
+          <input type="email" id="loginEmail" placeholder="ivan@example.com" required>
         </div>
-
-        <div class="user-actions">
-          <div class="icon-user">
-            <button onclick="">👤</button>
-          </div>
-          <div class="icon-settings">
-            <button onclick="">⚙️</button>
-          </div>
+        <div class="input-group">
+          <label>Пароль</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required>
         </div>
-
-      </div>
-
-    </header>
-
-    <main>
-      	<section class="board">
-			<div class="toolbar">
-      			<button onclick="" class="sort-button">Сортировка ∨</button>
-    		</div>
-			<section class="columns">
-				<section class="column">
-					<div class="column-header">
-					<div class="column-title-wrapper">
-						<span class="column-title">В планах</span>
-						<span class="column-counter">3</span>
-					</div>
-
-					<div class="column-controls">
-						<button onclick="">+</button>
-						<button onclick="">⋮</button>
-					</div>
-					</div>
-					
-					<div class="card-list">
-
-					<article class="card">
-
-						<div class="card-header">
-						<span class="card-title">[Название]</span>
-						<button onclick="">⋮</button>
-						</div>
-
-						<div class="card-divider"></div>
-
-						<div class="card-footer">
-						<div class="meta-item">👤 Имя, Фамилия</div>
-						<div class="meta-item">📅 30 мая 18:00</div>
-						</div>
-
-					</article>
-
-					</div>
-				</section>
-
-				<section class="column">
-
-					<div class="column-header">
-						<div class="column-title-wrapper">
-							<span class="column-title">В разработке</span>
-							<span class="column-counter">4</span>
-						</div>
-						<div class="column-controls">
-							<button onclick="">+</button>
-							<button onclick="">⋮</button>
-						</div>
-					</div>
-
-					<div class="card-list">
-
-					</div>
-				</section>
-
-				<section class="column">
-
-					<div class="column-header">
-						<div class="column-title-wrapper">
-							<span class="column-title">Готово</span>
-							<span class="column-counter">2</span>
-						</div>
-
-						<div class="column-controls">
-							<button onclick="">+</button>
-							<button onclick="">⋮</button>
-						</div>
-					</div>
-
-					<div class="card-list">
-
-					</div>
-				</section>
-			</section>
-		</section>
-
-		<section class="folder">
-		
-		</section>
-
-		<section class="analytics">
-		
-		</section>
-    </main>
+        <button type="submit" class="login-btn">Войти →</button>
+      </form>
+    </div>
   </div>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ (скрыт до входа) -->
+  <div id="mainApp" style="display: none; width: 100%; display: flex;">
+    <aside class="sidebar">
+      <div class="logo-circle"></div>
+      <nav class="nav-menu">
+        <div class="nav-item">
+          <button onclick="board()">☰</button>
+        </div>
+        <div class="nav-item">
+          <button onclick="folder()">📁</button>
+        </div>
+        <div class="nav-item">
+          <button onclick="analytics()">📊</button>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main-container">
+      <header class="header">
+        <h1>Канбан-доска</h1>
+        <div class="header-right">
+          <div class="search-box">
+            <button>🔍</button>
+            <input type="text" placeholder="Поиск">
+          </div>
+          <div class="user-actions">
+            <div class="icon-user">
+              <button>👤</button>
+            </div>
+            <div class="icon-settings">
+              <button>⚙️</button>
+            </div>
+            <button id="logoutBtn" class="logout-btn">Выйти</button>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="board">
+          <div class="toolbar">
+            <button class="sort-button">Сортировка ∨</button>
+          </div>
+          <section class="columns"></section>
+        </section>
+        <section class="folder"></section>
+        <section class="analytics"></section>
+      </main>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО СОЗДАНИЯ/РЕДАКТИРОВАНИЯ ЗАДАЧИ -->
+  <div id="taskModal" class="modal-overlay">
+    <div class="task-dialog">
+      <div class="dialog-header">
+        <h3 id="modalTitle">Создание задачи</h3>
+        <button class="close-dialog" id="closeModalBtn">✕</button>
+      </div>
+      <div class="task-form">
+        <form id="taskForm">
+          <div class="field-group">
+            <label>Заголовок (название)</label>
+            <input type="text" id="taskName" placeholder="Введите название задачи" required>
+          </div>
+
+          <div class="row-2cols">
+            <div class="field-group">
+              <label>Расположение</label>
+              <input type="text" id="taskLocation" placeholder="Бэклог / Спринт">
+            </div>
+            <div class="field-group">
+              <label>Название доски</label>
+              <input type="text" id="taskBoard" placeholder="Канбан / To Do">
+            </div>
+          </div>
+
+          <div class="row-2cols">
+            <div class="field-group">
+              <label>Исполнитель</label>
+              <input type="text" id="taskAssignee" placeholder="Имя Фамилия">
+            </div>
+            <div class="field-group">
+              <label>Дедлайн</label>
+              <input type="datetime-local" id="taskDeadline">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Важность</label>
+            <div class="importance-selector" id="importanceGroup">
+              <div class="importance-option high" data-value="Высокая">
+                <input type="radio" name="importance" value="Высокая"> <span>🔴 Высокая</span>
+              </div>
+              <div class="importance-option medium" data-value="Средняя">
+                <input type="radio" name="importance" value="Средняя"> <span>🟠 Средняя</span>
+              </div>
+              <div class="importance-option low" data-value="Низкая">
+                <input type="radio" name="importance" value="Низкая"> <span>🟢 Низкая</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Описание</label>
+            <textarea id="taskDesc" rows="3" placeholder="Детали задачи..."></textarea>
+          </div>
+
+          <div class="field-group">
+            <label>Прикрепить файлы</label>
+            <div class="file-attach-area" id="attachTrigger">
+              📎 Нажмите для выбора файлов
+              <input type="file" id="fileInput" multiple style="display: none;">
+            </div>
+            <div id="fileNamesList" class="file-list"></div>
+          </div>
+
+          <div class="dialog-actions">
+            <button type="button" class="btn-cancel" id="cancelBtn">Отмена</button>
+            <button type="submit" class="btn-submit" id="submitBtn">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastMsg" class="toast-msg"></div>
+
   <script src="index.js"></script>
 </body>
 </html>
