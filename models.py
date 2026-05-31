@@ -15,6 +15,11 @@ class Board(Base):
     title: Mapped[str] = mapped_column(String(255))
     columns: Mapped[List["BoardColumn"]] = relationship(back_populates="board", cascade="all, delete-orphan", order_by="BoardColumn.position")
 
+    def to_json(self):
+        return {
+            "id": self.id,
+            "title": self.title
+        }
 
 class BoardColumn(Base):
     __tablename__ = 'columns'
@@ -26,6 +31,13 @@ class BoardColumn(Base):
     board: Mapped["Board"] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(back_populates="column", cascade="all, delete-orphan", order_by="Task.position")
 
+    def to_json(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "position": self.position,
+            "board_id": self.board_id
+        }
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -37,8 +49,12 @@ class Task(Base):
     assigned_to: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     position: Mapped[int]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    
     column: Mapped["BoardColumn"] = relationship(back_populates="tasks")
-    assignee: Mapped[Optional["User"]] = relationship(back_populates="assigned_tasks", foreign_keys=[assigned_to])
+    assignee: Mapped[Optional["User"]] = relationship(
+        back_populates="assigned_tasks",
+        foreign_keys=[assigned_to]
+    )
 
     def to_json(self):
         return {
@@ -48,10 +64,9 @@ class Task(Base):
             "column_id": self.column_id,
             "assigned_to": self.assigned_to,
             "position": self.position,
-            "created_at": self.created_at,
-            "column": self.column,
-            "assignee": self.assignee
-            }
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
 
 class User(Base):
     __tablename__ = "users"
@@ -59,16 +74,18 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True)
     email: Mapped[str] = mapped_column(String(255), unique=True)
-    assigned_tasks: Mapped[List["Task"]] = relationship(back_populates="assignee", foreign_keys="Task.assigned_to")
-
+    assigned_tasks: Mapped[List["Task"]] = relationship(
+        back_populates="assignee",
+        foreign_keys="Task.assigned_to"
+    )
 
     def to_json(self):
         return {
             "id": self.id,
             "username": self.username,
-            "email": self.email,
-            "assigned_tasks": [task.title for task in self.assigned_tasks] if "assigned_tasks" in self.__dict__ else []
-            }
+            "email": self.email
+            #"assigned_tasks": [task.to_json() for task in self.assigned_tasks] if self.assigned_tasks else []
+        }
 
 
 class Log(Base):
@@ -79,3 +96,13 @@ class Log(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(100))
     detail: Mapped[Optional[str]] = mapped_column(String(1000))
+
+    def to_json(self):
+        import json
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "user_id": self.user_id,
+            "action": self.action,
+            "detail": json.loads(self.detail) if self.detail else None
+        }
