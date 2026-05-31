@@ -35,8 +35,8 @@ class TaskService:
             column_id: int,
             title: str,
             description: str = None,
-            assigned_to: User | None = None,
-            created_by: User | None = None
+            assigned_to: int | None = None,
+            created_by: int | None = None  # ← изменили с User на int
         ) -> Task:
         position = await max_position(session, column_id) + 1
         task = Task(
@@ -151,22 +151,31 @@ class UserService:
             user_id: int,
             username: str,
             email: str,
-            assigned_tasks: list[int] | None = None
+            assigned_tasks_ids: Optional[list[int]] = None
         ) -> User:
+        # Create user WITHOUT tasks first
         user = User(
             id=user_id,
             username=username,
-            email=email,
-            assigned_tasks=assigned_tasks
+            email=email
         )
-
         session.add(user)
         await session.flush()
-        # await log(session, task.id, "created", user_id=created_by, detail={"username": username, "id": user_id})
+        
+        # If there are tasks to assign, handle them after user is created
+        if assigned_tasks_ids:
+            result = await session.execute(
+                select(Task).where(Task.id.in_(assigned_tasks_ids))
+            )
+            tasks = result.scalars().all()
+            # Option 1: Set the relationship using the backref
+            for task in tasks:
+                task.assigned_to = user.id  # Set the foreign key directly
+        
         await session.commit()
         await session.refresh(user)
-
-        return user
+        
+        return user.to_json()
 
     @staticmethod
     async def get_user(user_id: int, session: AsyncSession):
@@ -206,13 +215,17 @@ class UserService:
     
 
 class UserCreate(BaseModel):
+    user_id: int
     username: str
     email: str
-    assigned_task_ids: Optional[list[int]] = None
+    assigned_tasks_ids: Optional[list[int]] = None
 
-
+class UserUpdate(BaseModel):
+    user_id: int
+    username: str
+    email: str
 
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str]
-    assigned_to: Optional[int]
+    assigned_to: Optional[int] = None
