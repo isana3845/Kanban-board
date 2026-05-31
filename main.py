@@ -201,7 +201,14 @@ async def delete_column(id: int, session: AsyncSession = Depends(get_db)):
 
 @app.get("/boards/{board_id}/tasks", response_model=List[dict])
 async def get_tasks(board_id: int, session: AsyncSession = Depends(get_db)):
-    board = await session.get(Board, board_id)
+    # Жадно загружаем колонки и их задачи
+    stmt = select(Board).options(
+        selectinload(Board.columns).selectinload(BoardColumn.tasks)
+    ).where(Board.id == board_id)
+    
+    result = await session.execute(stmt)
+    board = result.scalar_one_or_none()
+    
     if not board:
         raise HTTPException(status_code=404, detail=f"Board {board_id} not found")
     
