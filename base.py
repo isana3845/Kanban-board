@@ -271,6 +271,33 @@ async def create_task(
     return task.to_json()
 
 
+# @app.put("/tasks/{id}", response_model=dict)
+# async def edit_task(
+#     id: int,
+#     title: Optional[str] = None,
+#     description: Optional[str] = None,
+#     assigned_to: Optional[int] = None,
+#     session: AsyncSession = Depends(get_db)
+# ):
+#     try:
+#         update_data = {}
+#         if title is not None:
+#             update_data['title'] = title
+#         if description is not None:
+#             update_data['description'] = description
+#         if assigned_to is not None:
+#             update_data['assigned_to'] = assigned_to
+        
+#         task = await TaskService.update(
+#             session=session,
+#             task_id=id,
+#             user_id=2,
+#             **update_data
+#         )
+#         return task.to_json()
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+
 @app.put("/tasks/{id}", response_model=dict)
 async def edit_task(
     id: int,
@@ -280,6 +307,12 @@ async def edit_task(
     session: AsyncSession = Depends(get_db)
 ):
     try:
+        # Проверяем, существует ли задача
+        task = await session.get(Task, id)
+        if not task:
+            raise HTTPException(status_code=404, detail=f"Task {id} not found")
+        
+        # Собираем только те поля, которые переданы
         update_data = {}
         if title is not None:
             update_data['title'] = title
@@ -288,17 +321,19 @@ async def edit_task(
         if assigned_to is not None:
             update_data['assigned_to'] = assigned_to
         
-        task = await TaskService.update(
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        # Обновляем задачу через сервис
+        updated_task = await TaskService.update(
             session=session,
             task_id=id,
-            user_id=2,
+            user_id=1,  # временно user_id=1
             **update_data
         )
-        return task.to_json()
+        return updated_task.to_json()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
 @app.delete("/tasks/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(id: int, session: AsyncSession = Depends(get_db)):
     try:

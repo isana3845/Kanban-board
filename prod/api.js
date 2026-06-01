@@ -105,7 +105,7 @@ async function fetchTasks() {
 }
 
 // создаём задачу
-async function createTask(title, description = '', assig = null) {
+async function createTask(title, description = '', columnId = null, assig = null) {
     if (!BOARD_ID) {
         return null;
     }
@@ -117,6 +117,10 @@ async function createTask(title, description = '', assig = null) {
     
     if (assig !== null) {
         taskData.assigned_to = assig;
+    }
+
+    if (columnId !== null) {
+        taskData.column_id = columnId;
     }
     
     try {
@@ -153,7 +157,21 @@ async function moveTask(taskId, columnName, position = 0) {
 // обновляем задачу
 async function updateTask(taskId, updates) {
     try {
-        const updatedTask = await sendRequest(`/tasks/${taskId}`, 'PUT', updates);
+        const params = new URLSearchParams(); //собираем параметры в строку запроса
+        
+        if (updates.title !== undefined) { // updates = { title: 'Новое название' }
+            params.append('title', updates.title);
+        }
+        if (updates.description !== undefined) {
+            params.append('description', updates.description);
+        }
+        if (updates.assigned_to !== undefined) {
+            params.append('assigned_to', updates.assigned_to);
+        }
+        
+        // Отправляем PUT с параметрами в URL
+        const url = `/tasks/${taskId}?${params.toString()}`;
+        const updatedTask = await sendRequest(url, 'PUT');
         console.log('Обновлена задача:', updatedTask);
         return updatedTask;
     } catch (error) {

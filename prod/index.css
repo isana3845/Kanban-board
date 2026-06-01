@@ -261,3 +261,23 @@ main {
     gap: 6px;
 }
 
+.card {
+    position: relative;  
+    min-height: 100px;
+    padding-bottom: 35px;
+}
+
+.delete-task-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    font-size: 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #999;
+}
+
+.delete-task-btn:hover {
+    color: #e53935;
+}

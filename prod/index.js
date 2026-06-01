@@ -18,7 +18,7 @@ function folder() {
     analytics.style.display = "none";
 }
 
-function analitics() {
+function analytics() {
     const board = document.querySelector(".board");
     const folder = document.querySelector(".folder");
     const analytics = document.querySelector(".analytics");
@@ -46,10 +46,10 @@ function createCard(task) {
     card.setAttribute('data-task-id', task.id);
     card.setAttribute('draggable', 'true'); //карточку можно перетащить
 
-    let Date = 'Нет даты';
+    let datestr = 'Нет даты';
     if (task.created_at) {
-        const date = new Date(task.created_at);
-        Date = `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`;
+        const newdate = new Date(task.created_at);
+        datestr = `${newdate.getDate()}.${newdate.getMonth() + 1}.${newdate.getFullYear()}`;
     }
 
     const assig = task.assigned_to ? `Пользователь ${task.assigned_to}` : 'Не назначен';
@@ -63,9 +63,9 @@ function createCard(task) {
     <div class="card-divider"></div>
     <div class="card-footer">
         <div class="meta-item">👤 ${assig}</div>
-        <div class="meta-item">📅 ${Date}</div>
+        <div class="meta-item">📅 ${datestr}</div>
     </div>
-     <button class="delete-task-btn" data-task-id="${task.id}" style="position:absolute; right:10px; bottom:10px; font-size:12px; background:none; border:none; cursor:pointer;">🗑</button>
+    <button class="delete-task-btn" data-task-id="${task.id}" style="position:absolute; right:10px; bottom:10px; font-size:12px; background:none; border:none; cursor:pointer;">🗑</button>
     `;
 
     // перетаскивание карточки
@@ -80,7 +80,7 @@ function createCard(task) {
     return card;
 }
 
-// отрисовка задач
+//вносим задачи в колонки
 function renderCards(tasks) {
     const columns = document.querySelectorAll('.column');
 
@@ -109,8 +109,173 @@ function renderCards(tasks) {
 }
 
 function updateCounters(tasks) {
+    //считаем задачи в колонках
     let countPlans = 0;
     let countInProgress = 0;
     let countDone = 0;
-    // А сколько у нас колонок то :/
+
+    tasks.forEach(task => {
+        if (task.column_id === 1) countPlans++;
+        else if (task.column_id === 2) countInProgress++;
+        else if (task.column_id === 4) countDone++;
+    });
+    
+    //Находим колонки и обновляем цифры
+    const columns = document.querySelectorAll('.column');
+    if (columns[0]) {
+        const counter = columns[0].querySelector('.column-counter');
+        if (counter) counter.textContent = countPlans;
+    }
+    if (columns[1]) {
+        const counter = columns[1].querySelector('.column-counter');
+        if (counter) counter.textContent = countInProgress;
+    }
+    if (columns[2]) {
+        const counter = columns[2].querySelector('.column-counter');
+        if (counter) counter.textContent = countDone;
+    }
 }
+
+//Показываем задачи
+async function loadRenderTasks() {
+    const app = await initAPI();
+    
+    if (!app) {
+        console.error('API не инициализирован');
+        showMessage('Не удалось подключиться к серверу', true);
+        return;
+    }
+    
+    const tasks = await fetchTasks(); //загружаем задачи
+    console.log('Загружено задач:', tasks.length);
+    
+    renderCards(tasks);
+}
+
+//cоздание новой задачи(+) и показываем
+async function createTaskByUser(columnName) {
+    let columnId = null;
+    if (columnName === 'В планах') columnId = 1;
+    else if (columnName === 'В разработке') columnId = 2;
+    else if (columnName === 'Готово') columnId = 4;
+    
+    const title = prompt('Введите название задачи:');
+    if (!title) return;
+    
+    const description = prompt('Введите описание (необязательно):');
+    
+    await createTask(title, description || '', columnId, null);
+    
+    await loadRenderTasks(); //перезагружаем
+    
+    console.log("Создали задачу")
+    showMessage(`Задача "${title}" создана`);
+}
+
+//редактирование задачи(⋮)
+async function editTask(taskId) {
+    const newTitle = prompt('Введите новое название:');
+    if (newTitle) {
+        await updateTask(taskId, { title: newTitle }); //запрос на обновление
+        await loadRenderTasks(); // Перезагружаем доску
+        showMessage('Название обновлено');
+    }
+}
+
+// Удаление задачи ("🗑")
+async function deleteTaskPrompt(taskId) {
+    if (confirm('Удалить задачу?')) {
+        await deleteTask(taskId); //запрос на удаление
+        await loadRenderTasks();
+        showMessage('Задача удалена');
+    }
+}
+
+function DragAndDrop() {
+    const columns = document.querySelectorAll(".column");
+
+    columns.forEach(column => {
+        const columTitle = column.querySelector(".column-title")
+        if (!columTitle) return;
+
+        const columName = columTitle.textContent
+        const cardList = column.querySelector(".card-list")
+        if (!cardList) return;
+
+        //разрешаем перетаскивание задачи над колонкой
+        cardList.addEventListener('dragover', (e) => {
+            e.preventDefault(); //чтобы можно было перетащить
+            e.dataTransfer.dropEffect = 'move'; //меняем курсор на "+"
+        });
+
+        //сбрасываем карточку
+        cardList.addEventListener('drop', async (e) => { 
+            e.preventDefault();
+            const taskId = e.dataTransfer.getData('text/plain'); //ID
+            if (!taskId) return;
+
+            let targetColumnId = null;
+            let targetColumnName = null;
+            
+            if (columName === 'В планах') {
+                targetColumnId = 1;
+                targetColumnName = 'В планах';
+            } else if (columName === 'В разработке') {
+                targetColumnId = 2;
+                targetColumnName = 'В разработке';
+            } else if (columName === 'Готово') {
+                targetColumnId = 4;
+                targetColumnName = 'Готово';
+            }
+
+            if (targetColumnId) {
+                // moveTask(taskId, columnName, position = 0)
+                await moveTask(taskId, targetColumnName, 0);
+                await loadRenderTasks(); //перезагружка
+                console.log("Задача перенесена");
+                showMessage(`Вы перенесли задачу в "${columName}"`)
+            }
+        });
+    
+    });
+}
+
+document.addEventListener('click', async (e) => {
+    //кнопка редактирования (⋮)
+    if (e.target.classList.contains('card-more')) {
+        e.stopPropagation(); //чтобы другие кнопки не реагировали
+        const taskId = e.target.getAttribute('data-task-id') || 
+                       e.target.closest('.card')?.getAttribute('data-task-id'); //ID ближайшей карточки сверху
+        if (taskId) {
+            await editTask(parseInt(taskId));
+        }
+    }
+    
+    //кнопка удаления (🗑)
+    if (e.target.classList.contains('delete-task-btn')) {
+        e.stopPropagation();
+        const taskId = e.target.getAttribute('data-task-id') ||
+                       e.target.closest('.card')?.getAttribute('data-task-id'); 
+        if (taskId) {
+            await deleteTaskPrompt(parseInt(taskId));
+        }
+    }
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log("Страница запускается");
+
+    await loadRenderTasks();
+
+    DragAndDrop();
+
+    //(+)
+    const Addbutton = document.querySelectorAll('.column-controls button:first-child'); //первая кнопка
+    const columnNames = ['В планах', 'В разработке', 'Готово'];
+
+    Addbutton.forEach((btn, index) => {
+        btn.onclick = null;
+        btn.onclick = () => createTaskByUser(columnNames[index]);
+    });
+});
+
