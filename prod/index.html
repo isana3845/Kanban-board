@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Канбан-доска</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <aside class="sidebar">
+
+    <div class="logo-circle"></div>
+
+    <nav class="nav-menu">
+      <div class="nav-item">
+        <button onclick="board()">☰</button>
+      </div>
+      
+      <div class="nav-item">
+        <button onclick="folder()">📁</button>
+      </div>
+
+      <div class="nav-item">
+        <button onclick="analytics()">📊</button>
+      </div>
+
+    </nav>
+  </aside>
+
+  <div class="main-container">
+    
+    <header class="header">
+      <h1>Канбан-доска</h1>
+
+      <div class="header-right">
+        <div class="search-box">
+          <button onclick="">🔍</button>
+          <input type="text" placeholder="Поиск">
+        </div>
+
+        <div class="user-actions">
+          <div class="icon-user">
+            <button onclick="">👤</button>
+          </div>
+          <div class="icon-settings">
+            <button onclick="">⚙️</button>
+          </div>
+        </div>
+
+      </div>
+
+    </header>
+
+    <main>
+      	<section class="board">
+			<div class="toolbar">
+      			<button onclick="" class="sort-button">Сортировка ∨</button>
+    		</div>
+			<section class="columns">
+				<section class="column">
+					<div class="column-header">
+					<div class="column-title-wrapper">
+						<span class="column-title">В планах</span>
+						<span class="column-counter">3</span>
+					</div>
+
+					<div class="column-controls">
+						<button onclick="">+</button>
+						<button onclick="">⋮</button>
+					</div>
+					</div>
+					
+					<div class="card-list">
+
+					<article class="card">
+
+						<div class="card-header">
+						<span class="card-title">[Название]</span>
+						<button onclick="">⋮</button>
+						</div>
+
+						<div class="card-divider"></div>
+
+						<div class="card-footer">
+						<div class="meta-item">👤 Имя, Фамилия</div>
+						<div class="meta-item">📅 30 мая 18:00</div>
+						</div>
+
+					</article>
+
+					</div>
+				</section>
+
+				<section class="column">
+
+					<div class="column-header">
+						<div class="column-title-wrapper">
+							<span class="column-title">В разработке</span>
+							<span class="column-counter">4</span>
+						</div>
+						<div class="column-controls">
+							<button onclick="">+</button>
+							<button onclick="">⋮</button>
+						</div>
+					</div>
+
+					<div class="card-list">
+
+					</div>
+				</section>
+
+				<section class="column">
+
+					<div class="column-header">
+						<div class="column-title-wrapper">
+							<span class="column-title">Готово</span>
+							<span class="column-counter">2</span>
+						</div>
+
+						<div class="column-controls">
+							<button onclick="">+</button>
+							<button onclick="">⋮</button>
+						</div>
+					</div>
+
+					<div class="card-list">
+
+					</div>
+				</section>
+			</section>
+		</section>
+
+		<section class="folder">
+		
+		</section>
+
+		<section class="analytics">
+		
+		</section>
+    </main>
+  </div>
+  <script src="api.js"></script>
+  <script src="index.js"></script>
+</body>
+</html>

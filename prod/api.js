@@ -136,11 +136,6 @@ async function moveTask(taskId, columnName, position = 0) {
     }
     // получаем ID колонки
     const columnId = COLUMN_MAP[columnName];
-
-    if (!columnId) {
-        console.error('Неизвестная колонка:', columnName);
-        return null;
-    }
     
     try {
         const movedTask = await sendRequest(
