@@ -203,13 +203,13 @@ function DragAndDrop() {
         if (!cardList) return;
 
         //разрешаем перетаскивание задачи над колонкой
-        cardList.addEventListener('dragover', (e) => {
+        column.addEventListener('dragover', (e) => {
             e.preventDefault(); //чтобы можно было перетащить
             e.dataTransfer.dropEffect = 'move'; //меняем курсор на "+"
         });
 
         //сбрасываем карточку
-        cardList.addEventListener('drop', async (e) => { 
+        column.addEventListener('drop', async (e) => { 
             e.preventDefault();
             const taskId = e.dataTransfer.getData('text/plain'); //ID
             if (!taskId) return;
@@ -230,7 +230,7 @@ function DragAndDrop() {
 
             if (targetColumnId) {
                 // moveTask(taskId, columnName, position = 0)
-                await moveTask(taskId, targetColumnName, 0);
+                await moveTask(parseInt(taskId), targetColumnName, 0);
                 await loadRenderTasks(); //перезагружка
                 console.log("Задача перенесена");
                 showMessage(`Вы перенесли задачу в "${columName}"`)
