@@ -35,8 +35,8 @@ class TaskService:
             column_id: int,
             title: str,
             description: str = None,
-            assigned_to: User | None = None,
-            created_by: User | None = None
+            assigned_to: int | None = None,
+            created_by: int | None = None
         ) -> Task:
         position = await max_position(session, column_id) + 1
         task = Task(
@@ -216,3 +216,4 @@ class TaskCreate(BaseModel):
     title: str
     description: Optional[str]
     assigned_to: Optional[int]
+    column_id: Optional[int]

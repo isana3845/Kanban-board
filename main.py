@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +22,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # URL фронтенда
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешить все методы (GET, POST, PUT, DELETE, PATCH)
+    allow_headers=["*"],  # Разрешить все заголовки
+)
 
 # ==================== USERS ====================
 
@@ -140,7 +149,11 @@ async def delete_board(id: int, session: AsyncSession = Depends(get_db)):
 
 @app.get("/boards/{board_id}/columns", response_model=List[dict])
 async def get_columns(board_id: int, session: AsyncSession = Depends(get_db)):
-    board = await session.get(Board, board_id)
+    # Жадно загружаем колонки
+    stmt = select(Board).options(selectinload(Board.columns)).where(Board.id == board_id)
+    result = await session.execute(stmt)
+    board = result.scalar_one_or_none()
+    
     if not board:
         raise HTTPException(status_code=404, detail=f"Board {board_id} not found")
     
@@ -242,14 +255,17 @@ async def create_task(
         raise HTTPException(status_code=400, detail="Board has no columns")
     
     first_column = board.columns[0]
-    
+    print("=== ОТЛАДКА create_task ===")
+    print(f"task_data.column_id = {task_data.column_id}")
+    print(f"task_data.title = {task_data.title}")
+    print(f"Полные данные: {task_data.model_dump()}")
     task = await TaskService.create(
         session=session,
-        column_id=first_column.id,
+        column_id=task_data.column_id if task_data.column_id is not None else first_column.id,  # если column_id не передан - используем первую колонку
         title=task_data.title,
         description=task_data.description,
         assigned_to=task_data.assigned_to,
-        created_by=0
+        created_by=1
     )
     return task.to_json()
 

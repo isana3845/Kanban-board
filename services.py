@@ -220,12 +220,14 @@ class UserCreate(BaseModel):
     email: str
     assigned_tasks_ids: Optional[list[int]] = None
 
-class UserUpdate(BaseModel):
-    user_id: int
-    username: str
-    email: str
 
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str]
     assigned_to: Optional[int] = None
+    column_id: Optional[int] = None
+
+class UserUpdate(BaseModel):
+    user_id: int
+    username: str
+    email: str

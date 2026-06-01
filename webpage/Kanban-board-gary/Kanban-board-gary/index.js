@@ -45,6 +45,19 @@ async function getCurrentUserId() {
     }
 }
 
+// ==================== РАБОТА С ХРАНЕНИЕМ ВЫБРАННОЙ ДОСКИ ====================
+
+function saveSelectedBoard(boardId) {
+    if (boardId) {
+        localStorage.setItem('selectedBoardId', boardId);
+    }
+}
+
+function getSelectedBoard() {
+    const saved = localStorage.getItem('selectedBoardId');
+    return saved ? parseInt(saved) : null;
+}
+
 // ==================== НАВИГАЦИЯ ====================
 
 function board() {
@@ -89,6 +102,7 @@ async function loadBoards() {
             boardSelect.addEventListener('change', (e) => {
                 if (e.target.value) {
                     currentBoardId = parseInt(e.target.value);
+                    saveSelectedBoard(currentBoardId);
                     loadBoard(currentBoardId);
                 }
             });
@@ -102,8 +116,21 @@ async function loadBoards() {
             boardSelect.appendChild(option);
         });
         
-        if (boards.length > 0 && !currentBoardId) {
-            currentBoardId = boards[0].id;
+        // Восстанавливаем выбранную доску
+        let selectedBoardId = currentBoardId || getSelectedBoard();
+        
+        if (selectedBoardId && !boards.find(b => b.id === selectedBoardId)) {
+            selectedBoardId = null;
+        }
+        
+        if (boards.length > 0) {
+            if (!selectedBoardId) {
+                selectedBoardId = boards[0].id;
+            }
+            
+            currentBoardId = selectedBoardId;
+            saveSelectedBoard(currentBoardId);
+            boardSelect.value = currentBoardId;
             await loadBoard(currentBoardId);
         }
     } catch (error) {
@@ -159,7 +186,6 @@ function renderBoard(columns, tasks) {
         columnsContainer.appendChild(columnElement);
     });
     
-    // Кнопка добавления колонки
     const addColumnBtn = document.createElement('button');
     addColumnBtn.className = 'add-column-btn';
     addColumnBtn.textContent = '+ Добавить колонку';
@@ -188,14 +214,12 @@ function createColumnElement(column, tasks) {
         </div>
     `;
     
-    // Навешиваем обработчики
     const addBtn = columnDiv.querySelector('.add-task-btn');
     addBtn.addEventListener('click', () => createTask(column.id));
     
     const editBtn = columnDiv.querySelector('.edit-column-btn');
     editBtn.addEventListener('click', () => editColumn(column.id));
     
-    // Drag & Drop
     const cardList = columnDiv.querySelector('.card-list');
     cardList.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -208,8 +232,6 @@ function createColumnElement(column, tasks) {
         if (!taskId) return;
         
         const targetColumnId = column.id;
-        
-        // Определяем позицию для вставки
         const tasksInColumn = Array.from(cardList.querySelectorAll('.card'));
         let targetPosition = tasksInColumn.length;
         
@@ -231,7 +253,7 @@ function createColumnElement(column, tasks) {
 
 function createTaskElement(task) {
     return `
-        <article class="card" draggable="true" data-task-id="${task.id}" data-column-id="${task.column_id}" data-task-title="${escapeHtml(task.title)}">
+        <article class="card" draggable="true" data-task-id="${task.id}" data-column-id="${task.column_id}">
             <div class="card-header">
                 <span class="card-title">${escapeHtml(task.title)}</span>
                 <button class="edit-task-btn" title="Редактировать">⋮</button>
@@ -247,10 +269,9 @@ function createTaskElement(task) {
     `;
 }
 
-// ==================== ОБРАБОТЧИКИ СОБЫТИЙ (делегирование) ====================
+// ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
 document.addEventListener('click', async (e) => {
-    // Редактирование задачи
     if (e.target.classList.contains('edit-task-btn')) {
         e.stopPropagation();
         const card = e.target.closest('.card');
@@ -260,7 +281,6 @@ document.addEventListener('click', async (e) => {
         }
     }
     
-    // Удаление задачи
     if (e.target.classList.contains('delete-task-btn')) {
         e.stopPropagation();
         const card = e.target.closest('.card');
@@ -271,7 +291,6 @@ document.addEventListener('click', async (e) => {
     }
 });
 
-// Drag & Drop
 document.addEventListener('dragstart', (e) => {
     const card = e.target.closest('.card');
     if (card) {
@@ -346,7 +365,8 @@ async function createTask(columnId) {
             body: JSON.stringify({
                 title: title,
                 description: description || null,
-                assigned_to: userId
+                assigned_to: userId,
+                column_id: columnId
             })
         });
         
@@ -479,7 +499,6 @@ if (searchInput) {
             )
             .map(task => task.id);
         
-        // Подсветка найденных задач
         document.querySelectorAll('.card').forEach(card => {
             const taskId = parseInt(card.dataset.taskId);
             if (searchTerm && filteredTaskIds.includes(taskId)) {
@@ -511,7 +530,6 @@ if (sortButton) {
                 : b.title.localeCompare(a.title);
         });
         
-        // Перегруппировка задач по колонкам
         const columnsResponse = await fetch(`${API_BASE}/boards/${currentBoardId}/columns`);
         const columns = await handleResponse(columnsResponse);
         renderBoard(columns, tasks);
@@ -534,8 +552,61 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBoards();
 });
 
-// Глобальные функции для вызова из HTML
+
+// ==================== ТЕМНАЯ ТЕМА ====================
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        updateThemeButton('dark');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        updateThemeButton('light');
+    }
+}
+
+function updateThemeButton(theme) {
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    if (themeBtn) {
+        themeBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeButton(newTheme);
+}
+
+// Добавьте кнопку в DOM
+function addThemeToggle() {
+    const btn = document.createElement('button');
+    btn.id = 'theme-toggle-btn';
+    btn.className = 'theme-toggle';
+    btn.onclick = toggleTheme;
+    document.body.appendChild(btn);
+    
+    initTheme();
+}
+
+// Вызовите при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    // ... ваш существующий код ...
+    addThemeToggle();
+});
+
+
+// Глобальные функции
 window.board = board;
 window.folder = folder;
 window.analytics = analytics;
 window.createBoard = createBoard;
+window.createColumn = createColumn;
+window.editColumn = editColumn;
+window.createTask = createTask;
+window.editTask = editTask;
+window.deleteTask = deleteTask;
