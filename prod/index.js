@@ -6,6 +6,8 @@ function board() {
     board.style.display = "flex";
     folder.style.display = "none";
     analytics.style.display = "none";
+    
+    loadRenderTasks();
 }
 
 function folder() {
@@ -16,6 +18,8 @@ function folder() {
     board.style.display = "none";
     folder.style.display = "flex";
     analytics.style.display = "none";
+
+    loadFolders();
 }
 
 function analytics() {
@@ -26,6 +30,8 @@ function analytics() {
     board.style.display = "none";
     folder.style.display = "none";
     analytics.style.display = "flex";
+
+    loadAnalytics();
 }
 
 //пишем текст + от вредоносного
@@ -44,7 +50,7 @@ function createCard(task) {
     const card = document.createElement('article');
     card.className = 'card'
     card.setAttribute('data-task-id', task.id);
-    card.setAttribute('draggable', 'true'); //карточку можно перетащить
+    card.setAttribute('draggable', 'true');
 
     let datestr = 'Нет даты';
     if (task.created_at) {
@@ -58,7 +64,7 @@ function createCard(task) {
     <div class = "card-header">
         <span class="card-title">${escapeHtml(task.title)}</span>
         <button class="card-more" data-task-id="${task.id}">⋮</button>
-	</div>
+    </div>
     ${task.description ? `<div class="card-description" style="font-size:12px;color:#666;">${escapeHtml(task.description)}</div>` : ''}
     <div class="card-divider"></div>
     <div class="card-footer">
@@ -68,7 +74,6 @@ function createCard(task) {
     <button class="delete-task-btn" data-task-id="${task.id}" style="position:absolute; right:10px; bottom:10px; font-size:12px; background:none; border:none; cursor:pointer;">🗑</button>
     `;
 
-    // перетаскивание карточки
     card.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', task.id);
         card.style.opacity = '0.5';
@@ -84,7 +89,6 @@ function createCard(task) {
 function renderCards(tasks) {
     const columns = document.querySelectorAll('.column');
 
-    // очищаем, если были задачи
     columns.forEach(column => {
         const cardList = column.querySelector('.card-list');
         if (cardList) cardList.innerHTML = '';
@@ -109,7 +113,6 @@ function renderCards(tasks) {
 }
 
 function updateCounters(tasks) {
-    //считаем задачи в колонках
     let countPlans = 0;
     let countInProgress = 0;
     let countDone = 0;
@@ -120,7 +123,6 @@ function updateCounters(tasks) {
         else if (task.column_id === 4) countDone++;
     });
     
-    //Находим колонки и обновляем цифры
     const columns = document.querySelectorAll('.column');
     if (columns[0]) {
         const counter = columns[0].querySelector('.column-counter');
@@ -146,7 +148,7 @@ async function loadRenderTasks() {
         return;
     }
     
-    const tasks = await fetchTasks(); //загружаем задачи
+    const tasks = await fetchTasks();
     console.log('Загружено задач:', tasks.length);
     
     renderCards(tasks);
@@ -166,7 +168,7 @@ async function createTaskByUser(columnName) {
     
     await createTask(title, description || '', columnId, null);
     
-    await loadRenderTasks(); //перезагружаем
+    await loadRenderTasks();
     
     console.log("Создали задачу")
     showMessage(`Задача "${title}" создана`);
@@ -176,8 +178,8 @@ async function createTaskByUser(columnName) {
 async function editTask(taskId) {
     const newTitle = prompt('Введите новое название:');
     if (newTitle) {
-        await updateTask(taskId, { title: newTitle }); //запрос на обновление
-        await loadRenderTasks(); // Перезагружаем доску
+        await updateTask(taskId, { title: newTitle });
+        await loadRenderTasks();
         showMessage('Название обновлено');
     }
 }
@@ -185,7 +187,7 @@ async function editTask(taskId) {
 // Удаление задачи ("🗑")
 async function deleteTaskPrompt(taskId) {
     if (confirm('Удалить задачу?')) {
-        await deleteTask(taskId); //запрос на удаление
+        await deleteTask(taskId);
         await loadRenderTasks();
         showMessage('Задача удалена');
     }
@@ -195,63 +197,136 @@ function DragAndDrop() {
     const columns = document.querySelectorAll(".column");
 
     columns.forEach(column => {
-        const columTitle = column.querySelector(".column-title")
-        if (!columTitle) return;
+        const columnTitle = column.querySelector(".column-title");
+        if (!columnTitle) return;
 
-        const columName = columTitle.textContent
-        const cardList = column.querySelector(".card-list")
-        if (!cardList) return;
-
-        //разрешаем перетаскивание задачи над колонкой
+        const columnName = columnTitle.textContent;
+    
         column.addEventListener('dragover', (e) => {
-            e.preventDefault(); //чтобы можно было перетащить
-            e.dataTransfer.dropEffect = 'move'; //меняем курсор на "+"
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
         });
 
-        //сбрасываем карточку
         column.addEventListener('drop', async (e) => { 
             e.preventDefault();
-            const taskId = e.dataTransfer.getData('text/plain'); //ID
+            const taskId = e.dataTransfer.getData('text/plain');
             if (!taskId) return;
 
             let targetColumnId = null;
-            let targetColumnName = null;
             
-            if (columName === 'В планах') {
+            if (columnName === 'В планах') {
                 targetColumnId = 1;
-                targetColumnName = 'В планах';
-            } else if (columName === 'В разработке') {
+            } else if (columnName === 'В разработке') {
                 targetColumnId = 2;
-                targetColumnName = 'В разработке';
-            } else if (columName === 'Готово') {
+            } else if (columnName === 'Готово') {
                 targetColumnId = 4;
-                targetColumnName = 'Готово';
             }
 
             if (targetColumnId) {
-                // moveTask(taskId, columnName, position = 0)
-                await moveTask(parseInt(taskId), targetColumnName, 0);
-                await loadRenderTasks(); //перезагружка
+                await moveTask(parseInt(taskId), columnName, 0);
+                await loadRenderTasks();
                 console.log("Задача перенесена");
-                showMessage(`Вы перенесли задачу в "${columName}"`)
+                showMessage(`Вы перенесли задачу в "${columnName}"`);
             }
         });
-    
     });
 }
 
+//сортировка
+let sortDirection = 'asc';
+
+function setupSorting() {
+    const sortBtn = document.getElementById('sort-btn');
+    if (!sortBtn) return;
+    
+    sortBtn.onclick = async () => {
+        const tasks = await fetchTasks();
+        if (!tasks || tasks.length === 0) {
+            showMessage('Нет задач для сортировки');
+            return;
+        }
+        
+        if (sortDirection === 'asc') {
+            tasks.sort((a, b) => a.title.localeCompare(b.title));
+            sortBtn.textContent = 'Сортировка ↓';
+            sortDirection = 'desc';
+            showMessage('Сортировка по названию ↓');
+        } else {
+            tasks.sort((a, b) => b.title.localeCompare(a.title));
+            sortBtn.textContent = 'Сортировка ↑';
+            sortDirection = 'asc';
+            showMessage('Сортировка по названию ↑');
+        }
+        
+        renderCards(tasks);
+    };
+}
+
+//поиск
+function setupSearch() {
+    const searchInput = document.getElementById('search-input');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('input', async (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        
+        const tasks = await fetchTasks();
+        
+        const filteredTasks = tasks.filter(task => 
+            task.title.toLowerCase().includes(searchTerm) ||
+            (task.description && task.description.toLowerCase().includes(searchTerm))
+        );
+        
+        renderCards(filteredTasks);
+        
+        if (searchTerm && filteredTasks.length === 0) {
+            showMessage('Ничего не найдено');
+        }
+    });
+}
+
+//аналитика
+async function loadAnalytics() {
+    const analyticsSection = document.querySelector('.analytics');
+    if (!analyticsSection) return;
+    
+    try {
+        const tasks = await fetchTasks();
+        analyticsSection.innerHTML = `
+            <div class="analytics-container">
+                <h2>Аналитика</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Всего задач</h3>
+                        <p class="stat-number">${tasks.length}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        analyticsSection.innerHTML = '<div class="placeholder">Ошибка загрузки аналитики</div>';
+    }
+}
+
+//функция папок на канбан
+async function loadFolders() {
+    const folderSection = document.querySelector('.folder');
+    if (folderSection) {
+        folderSection.innerHTML = '<div class="placeholder">Функция папок в разработке</div>';
+    }
+}
+
+//работа с кнопками
 document.addEventListener('click', async (e) => {
-    //кнопка редактирования (⋮)
     if (e.target.classList.contains('card-more')) {
-        e.stopPropagation(); //чтобы другие кнопки не реагировали
+        e.stopPropagation();
         const taskId = e.target.getAttribute('data-task-id') || 
-                       e.target.closest('.card')?.getAttribute('data-task-id'); //ID ближайшей карточки сверху
+                       e.target.closest('.card')?.getAttribute('data-task-id');
         if (taskId) {
             await editTask(parseInt(taskId));
         }
     }
     
-    //кнопка удаления (🗑)
     if (e.target.classList.contains('delete-task-btn')) {
         e.stopPropagation();
         const taskId = e.target.getAttribute('data-task-id') ||
@@ -269,13 +344,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     DragAndDrop();
 
-    //(+)
-    const Addbutton = document.querySelectorAll('.column-controls button:first-child'); //первая кнопка
+    // Кнопки "+" в колонках
+    const addButtons = document.querySelectorAll('.column-controls button:first-child');
     const columnNames = ['В планах', 'В разработке', 'Готово'];
 
-    Addbutton.forEach((btn, index) => {
+    addButtons.forEach((btn, index) => {
         btn.onclick = null;
         btn.onclick = () => createTaskByUser(columnNames[index]);
     });
+    
+    // Настройка сортировки
+    setupSorting();
+    
+    // Настройка поиска
+    setupSearch();
+    
+    // Обновляем аналитику при загрузке
+    loadAnalytics();
 });
-
