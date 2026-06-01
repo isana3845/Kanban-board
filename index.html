@@ -8,27 +8,70 @@
 </head>
 <body>
 
-  <!-- СТРАНИЦА ВХОДА -->
+  <!-- СТРАНИЦА ВХОДА / РЕГИСТРАЦИИ -->
   <div id="loginPage" class="login-page">
     <div class="login-card">
-      <h1>Вход в систему</h1>
-      <div class="login-sub">Канбан-доска · Управление задачами</div>
-      <form id="loginForm">
+      <div class="login-tabs">
+        <button class="tab-btn active" data-tab="login">Вход</button>
+        <button class="tab-btn" data-tab="register">Регистрация</button>
+      </div>
+
+      <!-- ФОРМА ВХОДА -->
+      <form id="loginForm" class="auth-form active">
+        <h1>Вход в систему</h1>
+        <div class="login-sub">Канбан-доска · Управление задачами</div>
+
         <div class="input-group">
-          <label>Электронная почта</label>
+          <label>Email</label>
           <input type="email" id="loginEmail" placeholder="ivan@example.com" required>
         </div>
+
         <div class="input-group">
           <label>Пароль</label>
           <input type="password" id="loginPassword" placeholder="••••••••" required>
         </div>
+
         <button type="submit" class="login-btn">Войти →</button>
+        <div class="form-footer">
+          <span>Нет аккаунта? <a href="#" id="showRegisterBtn">Зарегистрироваться</a></span>
+        </div>
+      </form>
+
+      <!-- ФОРМА РЕГИСТРАЦИИ -->
+      <form id="registerForm" class="auth-form">
+        <h1>Регистрация</h1>
+        <div class="login-sub">Создайте новый аккаунт</div>
+
+        <div class="input-group">
+          <label>Имя пользователя</label>
+          <input type="text" id="regUsername" placeholder="Иван Иванов" required>
+        </div>
+
+        <div class="input-group">
+          <label>Email</label>
+          <input type="email" id="regEmail" placeholder="ivan@example.com" required>
+        </div>
+
+        <div class="input-group">
+          <label>Пароль</label>
+          <input type="password" id="regPassword" placeholder="минимум 6 символов" required>
+        </div>
+
+        <div class="input-group">
+          <label>Подтверждение пароля</label>
+          <input type="password" id="regPasswordConfirm" placeholder="повторите пароль" required>
+        </div>
+
+        <button type="submit" class="login-btn">Зарегистрироваться →</button>
+        <div class="form-footer">
+          <span>Уже есть аккаунт? <a href="#" id="showLoginBtn">Войти</a></span>
+        </div>
       </form>
     </div>
   </div>
 
   <!-- ОСНОВНОЙ КОНТЕНТ (скрыт до входа) -->
-  <div id="mainApp" style="display: none; width: 100%; display: flex;">
+  <div id="mainApp" style="display: none;">
     <aside class="sidebar">
       <div class="logo-circle"></div>
       <nav class="nav-menu">
