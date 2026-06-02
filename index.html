@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Канбан-доска</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+</head>
+<body>
+
+    <div class="auth-overlay" id="auth-screen">
+        <div class="auth-box">
+            <h2>Вход в систему</h2>
+            <input type="text" id="auth-username" placeholder="Ваш логин" onkeydown="if(event.key==='Enter') loginUser()">
+            <button onclick="loginUser()">Войти</button>
+        </div>
+    </div>
+
+    <div class="app-container" id="app-content" style="display: none;">
+        
+        <aside class="sidebar">
+            <div class="sidebar-logo"></div>
+            <nav class="sidebar-menu">
+                <div class="menu-item" id="menu-to-folders" title="Мои доски">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                </div>
+                <div class="menu-item" id="menu-to-board" title="Текущая доска">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </div>
+                <div class="menu-item" id="menu-to-analytics" title="Аналитика доски">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+            </nav>
+        </aside>
+
+        <div class="main-layout">
+            
+            <header class="header">
+                <h1 class="board-title" id="main-board-title">Выберите доску...</h1>
+                <div class="header-actions">
+                    <div class="header-controls">
+                        <div class="control-wrapper">
+                            <div class="avatar" id="avatar-trigger">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                            </div>
+                            <div class="dropdown-menu" id="user-dropdown">
+                                <div class="dropdown-header"><strong id="user-display-name">---</strong></div>
+                                <hr>
+                                <button onclick="logoutUser()" class="dropdown-btn text-red">Выйти из аккаунта</button>
+                            </div>
+                        </div>
+
+                        <div class="control-wrapper">
+                            <div class="settings-btn" id="settings-trigger">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            </div>
+                            <div class="dropdown-menu wide-dropdown" id="settings-dropdown">
+                                <div class="wip-toggle-box">
+                                    <label><input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> Включить WIP лимиты</label>
+                                </div>
+                                <hr>
+                                <div class="add-member-form">
+                                    <input type="text" id="new-member-name" placeholder="Логин пользователя">
+                                    <button onclick="addMember()">Добавить</button>
+                                </div>
+                                <hr>
+                                <div class="members-section-title">Участники доски:</div>
+                                <ul class="members-list" id="connected-members-list"></ul>
+                                <hr>
+                                <button onclick="leaveCurrentBoard()" class="dropdown-btn text-red" style="width: 100%; text-align: left;">Покинуть доску</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="view-container">
+                
+                <main class="board-content" id="view-kanban" style="display: none;">
+                    
+                    <div class="toolbar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px;">
+                        <select class="sort-select" onchange="applySort(this.value)">
+                            <option value="none">Сортировка (по умолчанию)</option>
+                            <option value="user">По пользователю</option>
+                            <option value="date">По дедлайну (ближайшие)</option>
+                            <option value="priority">По важности</option>
+                        </select>
+                        <button class="chat-toggle-btn" onclick="toggleChat()">💬 Чат доски</button>
+                    </div>
+
+                    <div class="board-columns">
+                        <div class="column">
+                            <div class="column-header">
+                                <div class="column-info"><span class="column-name">В планах</span> <span class="column-count" id="count-todo">0</span></div>
+                                <div class="column-controls control-wrapper">
+                                    <button onclick="openModalForCreate('todo')">+</button>
+                                    <button onclick="toggleColumnMenu('menu-wip-todo', event)">⋮</button>
+                                    <div class="dropdown-menu wip-menu" id="menu-wip-todo">
+                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
+                                        <input type="number" id="wip-input-todo" min="0" onchange="saveWipLimits()">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="cards-dropzone" id="cards-todo" data-status="todo"></div>
+                        </div>
+
+                        <div class="column">
+                            <div class="column-header">
+                                <div class="column-info"><span class="column-name">В разработке</span> <span class="column-count" id="count-in_progress">0</span></div>
+                                <div class="column-controls control-wrapper">
+                                    <button onclick="openModalForCreate('in_progress')">+</button>
+                                    <button onclick="toggleColumnMenu('menu-wip-in_progress', event)">⋮</button>
+                                    <div class="dropdown-menu wip-menu" id="menu-wip-in_progress">
+                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
+                                        <input type="number" id="wip-input-in_progress" min="0" onchange="saveWipLimits()">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="cards-dropzone" id="cards-in_progress" data-status="in_progress"></div>
+                        </div>
+
+                        <div class="column">
+                            <div class="column-header">
+                                <div class="column-info"><span class="column-name">Готово</span> <span class="column-count" id="count-done">0</span></div>
+                                <div class="column-controls control-wrapper">
+                                    <button onclick="openModalForCreate('done')">+</button>
+                                    <button onclick="toggleColumnMenu('menu-wip-done', event)">⋮</button>
+                                    <div class="dropdown-menu wip-menu" id="menu-wip-done">
+                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
+                                        <input type="number" id="wip-input-done" min="0" onchange="saveWipLimits()">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="cards-dropzone" id="cards-done" data-status="done"></div>
+                        </div>
+                    </div>
+
+                    <aside id="chat-sidebar" class="chat-sidebar" style="display: none;">
+                        <div class="chat-header">
+                            <h3>Чат доски</h3>
+                            <button onclick="toggleChat()">&times;</button>
+                        </div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <div class="chat-input-area">
+                            <div id="chat-task-preview" class="chat-task-preview" style="display: none;">
+                                <span id="chat-preview-title"></span>
+                                <button onclick="clearTaskPreview()">&times;</button>
+                            </div>
+                            <textarea id="chat-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }"></textarea>
+                            <button onclick="sendChatMessage()">Отправить</button>
+                        </div>
+                    </aside>
+                </main>
+
+                <main class="folders-content" id="view-folders" style="display: none;">
+                    <div class="folders-toolbar">
+                        <button class="btn-create-board" onclick="promptCreateBoard()">+ Создать доску</button>
+                    </div>
+                    <div class="folders-grid" id="folders-grid-container"></div>
+                </main>
+
+                <main class="analytics-content" id="view-analytics" style="display: none; padding: 20px; overflow-y: auto;">
+                    <h2>Аналитика доски</h2>
+                    <div class="analytics-block">
+                        <h3>Логированные действия пользователей</h3>
+                        <div class="logs-container" id="analytics-logs-list">
+                            </div>
+                    </div>
+                </main>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="task-modal">
+        <div class="modal-card">
+            
+            <button class="modal-link-btn" id="modal-link-task-btn" onclick="linkTaskToChat()" title="Обсудить в чате" style="display: none;">↪️ В чат</button>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            
+            <div class="modal-body">
+                <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
+                
+                <div class="meta-grid">
+                    <div class="meta-label">Расположение</div>
+                    <div class="meta-value" id="modal-location"></div>
+                    
+                    <div class="meta-label">Исполнитель</div>
+                    <div class="meta-value flex-align">
+                        <span class="avatar-dot"></span><input type="text" id="modal-assignee">
+                    </div>
+                    
+                    <div class="meta-label">Дедлайн</div>
+                    <div class="meta-value flex-align">
+                        <span class="meta-icon">🗓️</span><input type="datetime-local" id="modal-date">
+                    </div>
+                    
+                    <div class="meta-label">Важность</div>
+                    <div class="meta-value flex-align">
+                        <select id="modal-priority">
+                            <option>Высокая</option>
+                            <option>Средняя</option>
+                            <option>Низкая</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
+                <div class="mock-logs" id="modal-logs"></div>
+                
+                <div class="modal-save-panel">
+                    <button class="btn-save" onclick="saveTask()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
