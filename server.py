@@ -16,27 +16,38 @@ def get_db():
 
 def init_db():
     db = get_db()
-    db.execute('''CREATE TABLE IF NOT EXISTS boards 
-                  (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, owner_username TEXT, 
-                   wip_enabled INTEGER, wip_todo INTEGER, wip_in_progress INTEGER, wip_done INTEGER)''')
-    db.execute('''CREATE TABLE IF NOT EXISTS board_members 
-                  (board_id INTEGER, username TEXT)''')
-    db.execute('''CREATE TABLE IF NOT EXISTS tasks 
-                  (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, title TEXT, 
-                   assignee TEXT, date TEXT, priority TEXT, description TEXT, status TEXT, 
-                   creator TEXT, created_at TEXT)''')
-    db.execute('''CREATE TABLE IF NOT EXISTS users 
-                  (username TEXT PRIMARY KEY)''')
-    db.execute('''CREATE TABLE IF NOT EXISTS messages 
-                  (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, 
-                   content TEXT, linked_task_id INTEGER, linked_task_title TEXT)''')
-    # Новая таблица аналитики
-    db.execute('''CREATE TABLE IF NOT EXISTS action_logs 
-                  (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, 
-                   action_desc TEXT, created_at TEXT)''')
+
+    db.execute("""CREATE TABLE IF NOT EXISTS boards (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, owner_username TEXT, wip_enabled INTEGER, wip_todo INTEGER, wip_in_progress INTEGER, wip_done INTEGER)""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS board_members (board_id INTEGER, username TEXT)""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, title TEXT, assignee TEXT, date TEXT, priority TEXT, description TEXT, status TEXT, creator TEXT, created_at TEXT)""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY)""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, content TEXT, linked_task_id INTEGER, linked_task_title TEXT)""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS action_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, action_desc TEXT, created_at TEXT)""")
+
+    def has_column(table, column):
+        return any(col["name"] == column for col in db.execute(f"PRAGMA table_info({table})"))
+
+    if not has_column("tasks", "archived"):
+        db.execute("ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0")
+
+    if not has_column("tasks", "previous_status"):
+        db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
+    
+    if not has_column("tasks", "sort_order"):
+        db.execute(
+            "ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0"
+        )
+
+    if not has_column("tasks", "sort_order"):
+        db.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
+
     db.commit()
     db.close()
-
 init_db()
 
 # --- Вспомогательная функция логирования ---
@@ -93,6 +104,10 @@ class TaskData(BaseModel):
     priority: str = "Средняя"
     description: str = ""
     status: str
+
+class ReorderPayload(BaseModel):
+    status: str
+    task_ids: List[int]
 
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
@@ -169,19 +184,43 @@ def add_member(board_id: int, data: AuthData, session: Optional[str] = Cookie(No
 @app.delete("/api/boards/{board_id}/members/{username}")
 def remove_member(board_id: int, username: str, session: Optional[str] = Cookie(None)):
     db = get_db()
+    board = db.execute("SELECT * FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board:
+        raise HTTPException(status_code=404, detail="Доска не найдена")
+    
+    # Запрет удаления владельца из участников (Решение задачи 3)
+    if username == board["owner_username"]:
+        raise HTTPException(status_code=400, detail="Нельзя удалить владельца доски")
+        
     db.execute("DELETE FROM board_members WHERE board_id=? AND username=?", (board_id, username))
-    add_log(db, board_id, session, f"Удалил(а) участника '{username}'")
     db.commit()
     return {"status": "ok"}
 
-@app.delete("/api/boards/{board_id}/leave")
-def leave_board(board_id: int, session: Optional[str] = Cookie(None)):
-    if not session: raise HTTPException(status_code=401)
+@app.post("/api/boards/{board_id}/leave")
+def leave_board(board_id: int, payload: dict = None, session: Optional[str] = Cookie(None)):
+    if not session:
+        raise HTTPException(status_code=401)
+        
     db = get_db()
-    board = db.execute("SELECT owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
-    if board and board['owner_username'] == session:
-        raise HTTPException(status_code=400, detail="Владелец не может покинуть доску. Только удалить.")
+    board = db.execute("SELECT * FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board:
+        raise HTTPException(status_code=404)
     
+    # Если текущий пользователь — владелец, проверяется передача прав
+    if board["owner_username"] == session:
+        if not payload or "new_owner" not in payload:
+            raise HTTPException(status_code=400, detail="Необходимо указать нового владельца")
+        new_owner = payload["new_owner"]
+        
+        # Проверка, что преемник существует среди участников доски
+        member = db.execute("SELECT * FROM board_members WHERE board_id=? AND username=?", (board_id, new_owner)).fetchone()
+        if not member or new_owner == session:
+            raise HTTPException(status_code=400, detail="Указан некорректный новый владелец")
+        
+        # Назначение нового владельца
+        db.execute("UPDATE boards SET owner_username=? WHERE id=?", (new_owner, board_id))
+        
+    # Удаление покидающего пользователя из таблицы участников
     db.execute("DELETE FROM board_members WHERE board_id=? AND username=?", (board_id, session))
     add_log(db, board_id, session, "Покинул(а) доску")
     db.commit()
@@ -190,30 +229,233 @@ def leave_board(board_id: int, session: Optional[str] = Cookie(None)):
 @app.get("/api/tasks")
 def get_tasks(board_id: int, session: Optional[str] = Cookie(None)):
     db = get_db()
-    access = db.execute("SELECT 1 FROM board_members WHERE board_id=? AND username=?", (board_id, session)).fetchone()
-    if not access: raise HTTPException(status_code=403)
-    tasks = db.execute("SELECT * FROM tasks WHERE board_id=?", (board_id,)).fetchall()
+
+    access = db.execute(
+        "SELECT 1 FROM board_members WHERE board_id=? AND username=?",
+        (board_id, session)
+    ).fetchone()
+
+    if not access:
+        raise HTTPException(status_code=403)
+
+    tasks = db.execute(
+        """
+        SELECT *
+        FROM tasks
+        WHERE board_id=? AND archived=0
+        ORDER BY status, sort_order
+        """,
+        (board_id,)
+    ).fetchall()
+
     return [dict(row) for row in tasks]
+
+@app.get("/api/tasks/{task_id}")
+def get_task(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    
+    # 1. Сначала ищем задачу
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    
+    # 2. Проверяем, есть ли текущий пользователь в участниках доски, которой принадлежит задача
+    access = db.execute(
+        "SELECT 1 FROM board_members WHERE board_id=? AND username=?", 
+        (task['board_id'], session)
+    ).fetchone()
+    
+    if not access:
+        raise HTTPException(status_code=403, detail="Доступ запрещен")
+        
+    return dict(task)
+
+
 
 @app.post("/api/tasks")
 async def create_task(data: TaskData, session: Optional[str] = Cookie(None)):
     db = get_db()
-    cur = db.execute("INSERT INTO tasks (board_id, title, assignee, date, priority, description, status, creator, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                     (data.board_id, data.title, data.assignee, data.date, data.priority, data.description, data.status, session, datetime.now().strftime("%Y-%m-%d %H:%M")))
-    add_log(db, data.board_id, session, f"Создал(а) задачу '{data.title}'")
+
+    max_order = db.execute(
+        """
+        SELECT COALESCE(MAX(sort_order), -1)
+        FROM tasks
+        WHERE board_id=? AND status=? AND archived=0
+        """,
+        (data.board_id, data.status)
+    ).fetchone()[0]
+
+    sort_order = max_order + 1
+
+    cur = db.execute(
+        """
+        INSERT INTO tasks (
+            board_id,
+            title,
+            assignee,
+            date,
+            priority,
+            description,
+            status,
+            creator,
+            created_at,
+            sort_order
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            data.board_id,
+            data.title,
+            data.assignee,
+            data.date,
+            data.priority,
+            data.description,
+            data.status,
+            session,
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            sort_order
+        )
+    )
+
+    add_log(
+        db,
+        data.board_id,
+        session,
+        f"Создал(а) задачу '{data.title}'"
+    )
+
     db.commit()
+
     await manager.broadcast_update(data.board_id)
+
     return {"id": cur.lastrowid}
+
+# @app.put("/api/tasks/{task_id}")
+# async def update_task(task_id: int, data: TaskData, session: Optional[str] = Cookie(None)):
+#     db = get_db()
+
+#     old_task = db.execute(
+#         "SELECT status FROM tasks WHERE id=?",
+#         (task_id,)
+#     ).fetchone()
+
+#     if not old_task:
+#         raise HTTPException(status_code=404, detail="Задача не найдена")
+
+#     db.execute(
+#         """UPDATE tasks
+#            SET title=?, assignee=?, date=?, priority=?, description=?, status=?
+#            WHERE id=?""",
+#         (
+#             data.title,
+#             data.assignee,
+#             data.date,
+#             data.priority,
+#             data.description,
+#             data.status,
+#             task_id
+#         )
+#     )
+
+#     if old_task["status"] != data.status:
+#         statuses = {
+#             "todo": "В планах",
+#             "in_progress": "В разработке",
+#             "done": "Готово"
+#         }
+
+#         add_log(
+#             db,
+#             data.board_id,
+#             session,
+#             f"Переместил(а) задачу '{data.title}' из '{statuses.get(old_task['status'], old_task['status'])}' в '{statuses.get(data.status, data.status)}'"
+#         )
+#     else:
+#         add_log(
+#             db,
+#             data.board_id,
+#             session,
+#             f"Отредактировал(а) задачу '{data.title}'"
+#         )
+
+#     db.commit()
+#     await manager.broadcast_update(data.board_id)
+
+#     return {"status": "ok"}
+
+class TaskUpdatePayload(BaseModel):
+    title: str
+    assignee: Optional[str] = None
+    date: Optional[str] = None
+    priority: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
 
 @app.put("/api/tasks/{task_id}")
 async def update_task(task_id: int, data: TaskData, session: Optional[str] = Cookie(None)):
     db = get_db()
-    db.execute("UPDATE tasks SET title=?, assignee=?, date=?, priority=?, description=?, status=? WHERE id=?",
-               (data.title, data.assignee, data.date, data.priority, data.description, data.status, task_id))
-    add_log(db, data.board_id, session, f"Отредактировал(а) или передвинул(а) задачу '{data.title}'")
+
+    old_task = db.execute(
+        "SELECT status FROM tasks WHERE id=?",
+        (task_id,)
+    ).fetchone()
+
+    if not old_task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    # Обновление основных полей задачи
+    db.execute(
+        """UPDATE tasks
+           SET title=?, assignee=?, date=?, priority=?, description=?, status=?
+           WHERE id=?""",
+        (
+            data.title,
+            data.assignee,
+            data.date,
+            data.priority,
+            data.description,
+            data.status,
+            task_id
+        )
+    )
+
+    # Синхронизация измененного названия во всех привязанных сообщениях чата
+    db.execute(
+        """UPDATE messages 
+           SET linked_task_title = ? 
+           WHERE linked_task_id = ?""",
+        (data.title, task_id)
+    )
+
+    if old_task["status"] != data.status:
+        statuses = {
+            "todo": "В планах",
+            "in_progress": "В разработке",
+            "done": "Готово"
+        }
+
+        add_log(
+            db,
+            data.board_id,
+            session,
+            f"Переместил(а) задачу '{data.title}' из '{statuses.get(old_task['status'], old_task['status'])}' в '{statuses.get(data.status, data.status)}'"
+        )
+    else:
+        add_log(
+            db,
+            data.board_id,
+            session,
+            f"Отредактировал(а) задачу '{data.title}'"
+        )
+
     db.commit()
+    
+    # Рассылка обновления всем клиентам
     await manager.broadcast_update(data.board_id)
+
     return {"status": "ok"}
+
+
 
 @app.get("/api/boards/{board_id}/messages")
 def get_messages(board_id: int, session: Optional[str] = Cookie(None)):
@@ -258,5 +500,210 @@ async def websocket_endpoint(websocket: WebSocket, board_id: int):
     except WebSocketDisconnect:
         manager.disconnect(websocket, board_id)
 
+@app.delete("/api/boards/{board_id}")
+async def delete_board(board_id: int, session: Optional[str] = Cookie(None)):
+    if not session: raise HTTPException(status_code=401)
+
+    db = get_db()
+
+    board = db.execute(
+        "SELECT owner_username FROM boards WHERE id=?",
+        (board_id,)
+    ).fetchone()
+
+    if not board: raise HTTPException(status_code=404)
+    if board["owner_username"] != session: raise HTTPException(status_code=403)
+
+    db.execute("DELETE FROM boards WHERE id=?", (board_id,))
+    db.execute("DELETE FROM board_members WHERE board_id=?", (board_id,))
+    db.execute("DELETE FROM tasks WHERE board_id=?", (board_id,))
+    db.execute("DELETE FROM messages WHERE board_id=?", (board_id,))
+    db.execute("DELETE FROM action_logs WHERE board_id=?", (board_id,))
+
+    db.commit()
+
+    return {"status": "ok"}
+
+@app.put("/api/tasks/{task_id}/archive")
+async def archive_task(task_id:int, session:Optional[str]=Cookie(None)):
+    db=get_db()
+
+    task=db.execute(
+        "SELECT * FROM tasks WHERE id=?",
+        (task_id,)
+    ).fetchone()
+
+    if not task:
+        raise HTTPException(status_code=404)
+
+    db.execute(
+        "UPDATE tasks SET archived=1, previous_status=status WHERE id=?",
+        (task_id,)
+    )
+
+    add_log(
+        db,
+        task["board_id"],
+        session,
+        f"Отправил(а) задачу '{task['title']}' в архив"
+    )
+
+    db.commit()
+    await manager.broadcast_update(task["board_id"])
+
+    return {"status":"ok"}
+
+@app.put("/api/tasks/{task_id}/restore")
+async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+
+    task = db.execute(
+        "SELECT * FROM tasks WHERE id=?",
+        (task_id,)
+    ).fetchone()
+
+    if not task:
+        raise HTTPException(status_code=404)
+
+    db.execute(
+        """
+        UPDATE tasks
+        SET archived=0,
+            status=previous_status
+        WHERE id=?
+        """,
+        (task_id,)
+    )
+
+    add_log(
+        db,
+        task["board_id"],
+        session,
+        f"Восстановил(а) задачу '{task['title']}' из архива"
+    )
+
+    db.commit()
+
+    await manager.broadcast_update(task["board_id"])
+
+    return {"status": "ok"}
+
+@app.get("/api/boards/{board_id}/archive")
+def get_archive(board_id: int):
+    db = get_db()
+
+    tasks = db.execute(
+        """
+        SELECT *
+        FROM tasks
+        WHERE board_id=? AND archived=1
+        ORDER BY id DESC
+        """,
+        (board_id,)
+    ).fetchall()
+
+    return [dict(row) for row in tasks]
+
+@app.delete("/api/boards/{board_id}/archive")
+def clear_archive(board_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+
+    db.execute(
+        """
+        DELETE FROM tasks
+        WHERE board_id=? AND archived=1
+        """,
+        (board_id,)
+    )
+
+    add_log(
+        db,
+        board_id,
+        session,
+        "Полностью очистил(а) архив задач"
+    )
+
+    db.commit()
+
+    return {"status":"ok"}
+
+
+@app.put("/api/tasks/{task_id}/restore")
+async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+
+    task = db.execute(
+        "SELECT * FROM tasks WHERE id=?",
+        (task_id,)
+    ).fetchone()
+
+    if not task:
+        raise HTTPException(status_code=404)
+
+    db.execute(
+        "UPDATE tasks SET archived=0, status=previous_status WHERE id=?",
+        (task_id,)
+    )
+
+    add_log(
+        db,
+        task["board_id"],
+        session,
+        f"Восстановил(а) задачу '{task['title']}' из архива"
+    )
+
+    db.commit()
+    await manager.broadcast_update(task["board_id"])
+
+    return {"status": "ok"}
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task:
+        raise HTTPException(status_code=404)
+
+    db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    
+    add_log(db, task["board_id"], session, f"Удалил(а) задачу '{task['title']}' навсегда")
+    db.commit()
+    
+    return {"status": "ok"}
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
+
+@app.put("/api/boards/{board_id}/reorder")
+async def reorder_tasks(
+    board_id: int,
+    data: ReorderPayload,
+    session: Optional[str] = Cookie(None)
+):
+    db = get_db()
+
+    for index, task_id in enumerate(data.task_ids):
+        db.execute(
+            """
+            UPDATE tasks
+            SET sort_order=?, status=?
+            WHERE id=?
+            """,
+            (
+                index,
+                data.status,
+                task_id
+            )
+        )
+
+    db.commit()
+
+    await manager.broadcast_update(board_id)
+
+    return {"status": "ok"}
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 
