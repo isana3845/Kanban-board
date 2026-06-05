@@ -6,7 +6,7 @@
     <title>Канбан-доска</title>
     <link rel="stylesheet" href="/style.css">
     <link rel="icon" href="data:,">
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <script src="/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -29,40 +29,43 @@
                 <div class="menu-item" id="menu-to-folders" title="Мои доски">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
                 </div>
-                <div class="menu-item" id="menu-to-analytics" title="Аналитика доски">
+                <div class="menu-item" id="menu-to-analytics" title="Хаб доски">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+                <div class="menu-item" id="menu-to-settings" title="Настройки">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </div>
             </nav>
         </aside>
 
+
         <div class="main-layout">
             
             <header class="header">
-                <h1 class="board-title" id="main-board-title">Выберите доску...</h1>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h1 class="board-title" id="main-board-title">Выберите доску...</h1>
+                    <button id="edit-board-title-btn" onclick="renameCurrentBoard()" style="display: none; background: none; border: none; cursor: pointer; font-size: 16px;" title="Переименовать доску">✏️</button>
+                </div>
                 <div class="header-actions">
+                    
+                    <div class="search-container">
+                        <input type="text" class="search-input" placeholder="Поиск задачи">
+                        <button class="search-btn">🔍</button>
+                    </div>
+
                     <div class="header-controls">
                         <div class="control-wrapper">
-                            <div class="avatar" id="avatar-trigger">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                            <div class="user-profile-trigger" id="avatar-trigger">
+                                <div class="avatar">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                </div>
+                                <span class="header-username" id="header-username-text">Вход</span>
                             </div>
-                            <div class="dropdown-menu" id="user-dropdown">
+                            
+                            <div class="dropdown-menu wide-dropdown" id="user-dropdown">
                                 <div class="dropdown-header"><strong id="user-display-name">---</strong></div>
                                 <hr>
-                                <button onclick="logoutUser()" class="dropdown-btn text-red">Выйти из аккаунта</button>
-                            </div>
-                        </div>
-
-                        <div class="control-wrapper">
-                            <div class="settings-btn" id="settings-trigger">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                            </div>
-                            <div class="dropdown-menu wide-dropdown" id="settings-dropdown">
-                                <!-- Блок настроек, видимый только при активной доске -->
-                                <div id="board-settings-content" style="display: none;">
-                                    <div class="wip-toggle-box">
-                                        <label><input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> Включить WIP лимиты</label>
-                                    </div>
-                                    <hr>
+                                <div id="user-board-actions" style="display: none;">
                                     <div class="add-member-form">
                                         <input type="text" id="new-member-name" placeholder="Логин пользователя">
                                         <button onclick="addMember()">Добавить</button>
@@ -72,88 +75,71 @@
                                     <ul class="members-list" id="connected-members-list"></ul>
                                     <hr>
                                     <button onclick="leaveCurrentBoard()" class="dropdown-btn text-red" style="width: 100%; text-align: left;">Покинуть доску</button>
-                                    <button
-                                        id="delete-board-btn"
-                                        onclick="deleteCurrentBoard()"
-                                        class="dropdown-btn text-red"
-                                        style="display:none;margin-top:8px;">
-                                        Удалить доску
-                                    </button>
+                                    <button id="delete-board-btn" onclick="deleteCurrentBoard()" class="dropdown-btn text-red" style="display:none;margin-top:8px;">Удалить доску</button>
+                                    <hr>
                                 </div>
-
-                                <!-- Заглушка / Глобальные настройки -->
-                                <div id="global-settings-content" style="display: block;">
-                                    <div style="text-align: center; padding: 10px; color: #555; font-size: 13px;">
-                                        Для доступа к настройкам выберите доску из списка.
-                                    </div>
+                                <div id="user-no-board-msg" style="padding: 15px; text-align: center; color: #777; font-size: 13px;">
+                                    Выберите доску
                                 </div>
+                                <button onclick="logoutUser()" class="dropdown-btn text-red">Выйти из аккаунта</button>
                             </div>
-
                         </div>
                     </div>
                 </div>
             </header>
+
 
             <div class="view-container">
                 
                 <main class="board-content" id="view-kanban" style="display: none;">
                     
                     <div class="toolbar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px;">
-                        <select class="sort-select" onchange="applySort(this.value)">
-                            <option value="none">Сортировка (по умолчанию)</option>
-                            <option value="user">По пользователю</option>
-                            <option value="date">По дедлайну (ближайшие)</option>
-                            <option value="priority">По важности</option>
-                        </select>
+                        <div class="control-wrapper" style="display: flex; gap: 10px;">
+                            <button class="chat-toggle-btn" onclick="toggleColumnMenu('filter-sort-dropdown', event)">Управление задачами 🔽</button>
+                            <button class="chat-toggle-btn" onclick="createNewColumn()" style="background-color: #8c8c8c;">+ Новая колонка</button>
+                            
+                            <div class="dropdown-menu" id="filter-sort-dropdown" style="width: 280px; left: 0; right: auto; padding: 15px;" onclick="event.stopPropagation()">
+                                <div style="display: flex; flex-direction: column;">
+                                    <div class="wip-title">Сортировка:</div>
+                                    <select class="sort-select" style="width:100%; margin-bottom: 15px;" onchange="applySort(this.value)">
+                                        <option value="none">По умолчанию</option>
+                                        <option value="user">По пользователю</option>
+                                        <option value="date">По дедлайну</option>
+                                        <option value="priority">По важности</option>
+                                    </select>
+                                    
+                                    <hr style="margin-bottom: 10px;">
+                                    
+                                    <div class="wip-title">Исполнитель:</div>
+                                    <div id="filter-assignees" style="max-height: 90px; overflow-y:auto; margin-bottom:10px; font-size:13px;"></div>
+                                    
+                                    <div class="wip-title">Важность:</div>
+                                    <div style="font-size:13px; margin-bottom:10px;">
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Высокая"> Высокая</label>
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Средняя"> Средняя</label>
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Низкая"> Низкая</label>
+                                    </div>
+
+                                    <div class="wip-title">Дедлайн:</div>
+                                    <select id="filter-deadline" style="width:100%; font-size:13px; margin-bottom:15px; padding: 5px;">
+                                        <option value="all">Любое время</option>
+                                        <option value="3">Ближайшие 3 дня</option>
+                                        <option value="7">Ближайшая неделя</option>
+                                        <option value="14">Ближайшие 2 недели</option>
+                                    </select>
+                                    
+                                    <div style="display: flex; gap: 8px;">
+                                        <button onclick="applyFilters()" style="flex: 1; padding: 6px; background: #0000ff; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Применить</button>
+                                        <button onclick="clearFilters()" style="flex: 1; padding: 6px; background: #cc0000; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Сбросить</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
                         <button class="chat-toggle-btn" onclick="toggleChat()">💬 Чат доски</button>
                     </div>
 
-                    <div class="board-columns">
-                        <div class="column">
-                            <div class="column-header">
-                                <div class="column-info"><span class="column-name">В планах</span> <span class="column-count" id="count-todo">0</span></div>
-                                <div class="column-controls control-wrapper">
-                                    <button onclick="openModalForCreate('todo')">+</button>
-                                    <button onclick="toggleColumnMenu('menu-wip-todo', event)">⋮</button>
-                                    <div class="dropdown-menu wip-menu" id="menu-wip-todo">
-                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
-                                        <input type="number" id="wip-input-todo" min="0" onchange="saveWipLimits()">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="cards-dropzone" id="cards-todo" data-status="todo"></div>
-                        </div>
-
-                        <div class="column">
-                            <div class="column-header">
-                                <div class="column-info"><span class="column-name">В разработке</span> <span class="column-count" id="count-in_progress">0</span></div>
-                                <div class="column-controls control-wrapper">
-                                    <button onclick="openModalForCreate('in_progress')">+</button>
-                                    <button onclick="toggleColumnMenu('menu-wip-in_progress', event)">⋮</button>
-                                    <div class="dropdown-menu wip-menu" id="menu-wip-in_progress">
-                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
-                                        <input type="number" id="wip-input-in_progress" min="0" onchange="saveWipLimits()">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="cards-dropzone" id="cards-in_progress" data-status="in_progress"></div>
-                        </div>
-
-                        <div class="column">
-                            <div class="column-header">
-                                <div class="column-info"><span class="column-name">Готово</span> <span class="column-count" id="count-done">0</span></div>
-                                <div class="column-controls control-wrapper">
-                                    <button onclick="openModalForCreate('done')">+</button>
-                                    <button onclick="toggleColumnMenu('menu-wip-done', event)">⋮</button>
-                                    <div class="dropdown-menu wip-menu" id="menu-wip-done">
-                                        <div class="wip-title">WIP Лимит (0 - нет):</div>
-                                        <input type="number" id="wip-input-done" min="0" onchange="saveWipLimits()">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="cards-dropzone" id="cards-done" data-status="done"></div>
-                        </div>
-                    </div>
+                    <div class="board-columns"></div>
 
                     <aside id="chat-sidebar" class="chat-sidebar" style="display: none;">
                         <div class="chat-header">
@@ -193,6 +179,11 @@
                             <div class="log-folder-title">Архив задач</div>
                         </div>
 
+                        <div class="log-folder-card">
+                            <div class="gantt-folder-icon"></div>
+                            <div class="log-folder-title">Диаграмма Ганта</div>
+                        </div>
+
                     </div>
 
                     <div id="analytics-logs-view" style="display:none;margin-top:25px;">
@@ -206,6 +197,19 @@
                         <div id="archive-tasks-list" style="margin-top:20px;"></div>
                     </div>
 
+                </main>
+
+                <main class="folders-content" id="view-settings" style="display: none;">
+                    <h2>Настройки доски</h2>
+                    <div style="margin-top: 20px; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
+                        <div class="wip-toggle-box" style="font-size: 16px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()" style="margin-right: 10px; width: 18px; height: 18px;"> 
+                                Включить WIP лимиты
+                            </label>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация лимитов колонок для текущей доски.</p>
+                    </div>
                 </main>
 
             </div>
@@ -252,6 +256,20 @@
                     <button class="btn-archive" onclick="archiveCurrentTask()">В архив</button>
                     <button class="btn-save" onclick="saveTask()">Сохранить</button>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-backdrop" id="col-archive-modal" style="display:none; z-index:700;">
+        <div style="margin: 60px auto; display:flex; flex-direction:column; align-items:center;">
+            <div class="column" style="width: 350px; background:#e6e6e6; border:2px solid #0000ff; padding:12px; display:flex; flex-direction:column; max-height:80vh;">
+                <div class="column-header" style="justify-content:center; position:relative;">
+                    <span class="column-name" id="archived-col-modal-name">Название</span>
+                    <button onclick="closeArchivedColumnModal()" style="position:absolute; right:0; top:-5px; background:none; border:none; font-size:20px; cursor:pointer;">&times;</button>
+                </div>
+                <div class="cards-dropzone" id="archived-col-tasks" style="flex:1; overflow-y:auto; min-height:150px; margin-bottom:15px;"></div>
+                <button onclick="restoreArchivedColumn()" style="background:#0000ff; color:white; border:none; padding:8px; margin-bottom:8px; cursor:pointer; font-weight:bold;">Вернуть на доску</button>
+                <button onclick="deleteArchivedColumn()" style="background:#cc0000; color:white; border:none; padding:8px; cursor:pointer; font-weight:bold;">Удалить навсегда</button>
             </div>
         </div>
     </div>

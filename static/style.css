@@ -21,6 +21,10 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
 .wide-dropdown { width: 260px; }
 .wip-menu { right: auto; left: 0; top: 30px; width: 160px; padding: 8px; background-color: #cccccc; }
 .wip-title { font-size: 11px; font-weight: bold; margin-bottom: 4px; color: #222; }
+#menu-wip-done {
+    left: auto !important;
+    right: 0 !important;
+}
 
 /* Формы внутри выпадающих панелей */
 .dropdown-menu input[type="text"], 
@@ -418,5 +422,258 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
 .folder-item.active .folder-name {
     color: #1e40af;
     font-weight: 600;
+}
+
+/* Поиск и профиль в Header */
+.search-container {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+    background-color: #e6e6e6;
+    border: 1px solid #999;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.search-input {
+    border: none;
+    background: transparent;
+    padding: 6px 10px;
+    outline: none;
+    font-size: 13px;
+    width: 200px;
+}
+
+.search-btn {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-left: 1px solid #999;
+}
+
+.search-btn:hover {
+    background-color: #d9d9d9;
+}
+
+.user-profile-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.user-profile-trigger:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.header-username {
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* Иконка для Архива задач в Хабе доски */
+.archive-folder-icon {
+    width: 130px;
+    height: 150px;
+    border: 2px solid #555555;
+    background: #e6e6e6;
+    position: relative;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.archive-folder-icon::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    right: 15px;
+    top: 30px;
+    height: 80px;
+    border: 2px solid #555555;
+    background: #cccccc;
+    border-radius: 2px;
+}
+
+.archive-folder-icon::after {
+    content: '';
+    position: absolute;
+    left: 45px;
+    right: 45px;
+    top: 65px;
+    border-top: 4px solid #555555;
+    border-radius: 2px;
+}
+
+.gantt-folder-icon {
+    width: 130px;
+    height: 150px;
+    border: 2px solid #0000ff;
+    background: #d0d0d0;
+    position: relative;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+/* Отрисовка полос графика Ганта с помощью теней */
+.gantt-folder-icon::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 35px;
+    width: 40px;
+    border-top: 10px solid #0000ff;
+    border-radius: 4px;
+    box-shadow: 
+        30px 25px 0 0 #0000ff,
+        15px 50px 0 0 #0000ff,
+        45px 75px 0 0 #0000ff;
+}
+
+/* Контейнер элементов управления внутри меню колонок */
+.wip-controls {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    width: 100%;
+}
+
+.wip-controls input {
+    flex: 1; /* Поле ввода автоматически подстраивается под ширину */
+    height: 100%;
+    border: 1px solid #666;
+    margin: 0 !important;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 2px;
+    min-width: 0;
+}
+
+/* Скрытие стандартных стрелок у input type="number" */
+.wip-controls input::-webkit-outer-spin-button,
+.wip-controls input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Измененная кнопка ОК: теперь она серая и располагается на всю ширину под инпутом */
+.btn-apply-rename {
+    background-color: #8c8c8c !important;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    height: 24px;
+    width: 100%;
+    border-radius: 2px;
+    font-size: 11px;
+    
+    /* Флекс-выравнивание текста по центру вертикали и горизонтали внутри кнопки */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1; 
+    
+    transition: background-color 0.15s ease;
+}
+
+.btn-apply-rename:hover {
+    background-color: #737373 !important;
+}
+
+/* Группировка поля ввода и квадратных кнопок +/- */
+/* Контейнер для поля ввода названия и кнопки ОК под ним */
+.wip-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px; 
+    width: 100%;
+}
+
+.wip-name-group input {
+    width: 100%;
+    height: 26px;
+    border: 1px solid #666;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 2px;
+}
+
+.wip-limit-group {
+    gap: 0;
+}
+
+.wip-limit-group input {
+    flex: 1;
+    height: 100%;
+    border: 1px solid #666;
+    border-right: none;
+    margin: 0 !important;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 2px 0 0 2px;
+    min-width: 0;
+}
+
+/* Измененные кнопки математических действий: теперь серые и квадратные */
+.btn-wip-math {
+    background-color: #8c8c8c !important;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    height: 100%;
+    width: 26px !important;
+    padding: 0 !important;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+}
+
+.btn-wip-math:hover {
+    background-color: #737373 !important;
+}
+
+.btn-wip-math:nth-child(2) {
+    border-right: 1px solid #737373;
+}
+
+.btn-wip-math:last-child {
+    border-radius: 0 2px 2px 0;
+}
+
+.drag-handle {
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    color: #8c8c8c;
+    transition: color 0.2s;
+    user-select: none;
+}
+
+.drag-handle:hover {
+    color: #333;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Визуал "шесть точек" */
+.drag-handle::before {
+    content: "⋮⋮";
+    font-size: 18px;
+    line-height: 1;
+    letter-spacing: -2px;
 }
 

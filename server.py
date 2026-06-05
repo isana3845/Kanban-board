@@ -16,35 +16,28 @@ def get_db():
 
 def init_db():
     db = get_db()
-
     db.execute("""CREATE TABLE IF NOT EXISTS boards (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, owner_username TEXT, wip_enabled INTEGER, wip_todo INTEGER, wip_in_progress INTEGER, wip_done INTEGER)""")
-
     db.execute("""CREATE TABLE IF NOT EXISTS board_members (board_id INTEGER, username TEXT)""")
-
     db.execute("""CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, title TEXT, assignee TEXT, date TEXT, priority TEXT, description TEXT, status TEXT, creator TEXT, created_at TEXT)""")
-
     db.execute("""CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY)""")
-
     db.execute("""CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, content TEXT, linked_task_id INTEGER, linked_task_title TEXT)""")
-
     db.execute("""CREATE TABLE IF NOT EXISTS action_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, action_desc TEXT, created_at TEXT)""")
 
     def has_column(table, column):
         return any(col["name"] == column for col in db.execute(f"PRAGMA table_info({table})"))
 
-    if not has_column("tasks", "archived"):
-        db.execute("ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0")
-
-    if not has_column("tasks", "previous_status"):
-        db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
+    if not has_column("tasks", "archived"): db.execute("ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0")
+    if not has_column("tasks", "previous_status"): db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
     
-    if not has_column("tasks", "sort_order"):
-        db.execute(
-            "ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0"
-        )
-
-    if not has_column("tasks", "sort_order"):
-        db.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
+    # Инициализация динамической структуры колонок для досок
+    if not has_column("boards", "columns_data"): 
+        db.execute("ALTER TABLE boards ADD COLUMN columns_data TEXT")
+        default_cols = json.dumps([
+            {"id": "todo", "name": "В планах", "wip_limit": 0, "archived": False},
+            {"id": "in_progress", "name": "В разработке", "wip_limit": 0, "archived": False},
+            {"id": "done", "name": "Готово", "wip_limit": 0, "archived": False}
+        ])
+        db.execute("UPDATE boards SET columns_data=?", (default_cols,))
 
     db.commit()
     db.close()
@@ -90,11 +83,9 @@ class AuthData(BaseModel):
 class BoardData(BaseModel):
     title: str
 
-class BoardUpdateData(BaseModel):
+class BoardSettingsUpdate(BaseModel):
     wip_enabled: int
-    wip_todo: int
-    wip_in_progress: int
-    wip_done: int
+    columns_data: str
 
 class TaskData(BaseModel):
     board_id: int
@@ -108,6 +99,9 @@ class TaskData(BaseModel):
 class ReorderPayload(BaseModel):
     status: str
     task_ids: List[int]
+
+class BoardTitleUpdate(BaseModel):
+    title: str
 
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
@@ -150,14 +144,21 @@ def create_board(data: BoardData, session: Optional[str] = Cookie(None)):
     db.commit()
     return {"id": board_id, "title": data.title}
 
-@app.put("/api/boards/{board_id}/wip")
-async def update_wip(board_id: int, data: BoardUpdateData, session: Optional[str] = Cookie(None)):
+@app.put("/api/boards/{board_id}/settings")
+async def update_board_settings(board_id: int, data: BoardSettingsUpdate, session: Optional[str] = Cookie(None)):
     db = get_db()
-    db.execute("UPDATE boards SET wip_enabled=?, wip_todo=?, wip_in_progress=?, wip_done=? WHERE id=? AND owner_username=?",
-               (data.wip_enabled, data.wip_todo, data.wip_in_progress, data.wip_done, board_id, session))
-    add_log(db, board_id, session, "Изменил(а) настройки лимитов WIP")
+    db.execute("UPDATE boards SET wip_enabled=?, columns_data=? WHERE id=? AND owner_username=?",
+        (data.wip_enabled, data.columns_data, board_id, session))
     db.commit()
     await manager.broadcast_update(board_id)
+    return {"status": "ok"}
+
+@app.delete("/api/boards/{board_id}/columns/{column_id}/tasks")
+async def delete_col_tasks(board_id: int, column_id: str, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    db.execute("DELETE FROM tasks WHERE board_id=? AND status=?", (board_id, column_id))
+    add_log(db, board_id, session, f"Удалил(а) колонку и все задачи в ней навсегда")
+    db.commit()
     return {"status": "ok"}
 
 @app.get("/api/boards/{board_id}/members")
@@ -225,6 +226,19 @@ def leave_board(board_id: int, payload: dict = None, session: Optional[str] = Co
     add_log(db, board_id, session, "Покинул(а) доску")
     db.commit()
     return {"status": "ok"}
+
+@app.put("/api/boards/{board_id}/title")
+def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    
+    board = db.execute("SELECT owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board:
+        raise HTTPException(status_code=404)
+        
+    db.execute("UPDATE boards SET title=? WHERE id=?", (data.title, board_id))
+    add_log(db, board_id, session, f"Изменил(а) название доски на '{data.title}'")
+    db.commit()
+    return {"status": "ok", "new_title": data.title}
 
 @app.get("/api/tasks")
 def get_tasks(board_id: int, session: Optional[str] = Cookie(None)):
