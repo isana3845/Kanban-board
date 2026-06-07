@@ -35,7 +35,7 @@ class TaskService:
             title: str,
             description: str = None,
             assigned_to: int | None = None,
-            created_by: int | None = None
+            created_by: int | None = None  # ← изменили с User на int
         ) -> Task:
         position = await max_position(session, column_id) + 1
         column = await session.get(BoardColumn, column_id)
@@ -149,12 +149,13 @@ class BoardService:
 class UserService:
     @staticmethod
     async def create(
-            session: AsyncSession,
-            user_id: int,
-            username: str,
-            email: str,
-            assigned_tasks_ids: Optional[list[int]] = None
+        session: AsyncSession,
+        user_id: int,
+        username: str,
+        email: str,
+        assigned_tasks_ids: Optional[list[int]] = None,
     ) -> User:
+        # Create user WITHOUT tasks first
         user = User(
             id=user_id,
             username=username,
@@ -163,13 +164,15 @@ class UserService:
         session.add(user)
         await session.flush()
         
+        # If there are tasks to assign, handle them after user is created
         if assigned_tasks_ids:
             result = await session.execute(
                 select(Task).where(Task.id.in_(assigned_tasks_ids))
             )
             tasks = result.scalars().all()
+            # Option 1: Set the relationship using the backref
             for task in tasks:
-                task.assigned_to = user.id
+                task.assigned_to = user.id  # Set the foreign key directly
         
         await session.commit()
         await session.refresh(user)
