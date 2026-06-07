@@ -154,7 +154,7 @@ class UserService:
             username: str,
             email: str,
             assigned_tasks_ids: Optional[list[int]] = None
-        ) -> User:t
+    ) -> User:
         user = User(
             id=user_id,
             username=username,
