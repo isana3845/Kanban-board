@@ -113,19 +113,19 @@ function initListeners() {
             return;
         }
         
-        // Принудительное скрытие внутренних разделов Хаба и возврат к сетке Хаба
         const logsView = document.getElementById('analytics-logs-view');
         const archiveView = document.getElementById('analytics-archive-view');
+        const backlogView = document.getElementById('analytics-backlog-view');
         const foldersGrid = document.querySelector('#view-analytics .folders-grid');
         
         if (logsView) logsView.style.display = 'none';
         if (archiveView) archiveView.style.display = 'none';
+        if (backlogView) backlogView.style.display = 'none';
         if (foldersGrid) foldersGrid.style.display = 'grid';
         
         switchView('analytics');
     };
 
-    // Слушатель для новой панели настроек
     document.getElementById('menu-to-settings').onclick = () => {
         if (activeBoardId) switchView('settings');
         else alert('Выберите доску в меню папок.');
@@ -135,10 +135,17 @@ function initListeners() {
     
     document.addEventListener('click', e => {
         if (!e.target.closest('.control-wrapper')) {
-            document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+            document.querySelectorAll('.dropdown-menu').forEach(m => {
+                if (m.id !== 'board-column-select') m.style.display = 'none';
+            });
+        }
+        if (!e.target.closest('#btn-restore-board') && !e.target.closest('#board-column-select')) {
+            const colSelect = document.getElementById('board-column-select');
+            if (colSelect) colSelect.style.display = 'none';
         }
     });
 }
+
 
 function renderColumns() {
     // 1. Запоминаем ID колонки, чьё меню сейчас открыто (исправлен поиск по префиксу menu-wip-)
@@ -953,10 +960,9 @@ function openModalForCreate(status) {
     targetColumnStatus = status;
     
     const locEl = document.getElementById('modal-location');
-    if (locEl) locEl.innerText = statusMap[status] || status;
+    if (locEl) locEl.innerText = status === 'backlog_creation' ? 'Бэклог' : (statusMap[status] || status);
 
     document.getElementById('modal-link-task-btn').style.display = 'none'; 
-
     document.getElementById('modal-title').value = '';
     document.getElementById('modal-assignee').value = activeUser.username;
     document.getElementById('modal-date').value = '';
@@ -966,15 +972,19 @@ function openModalForCreate(status) {
     document.getElementById('modal-comments-toggle-btn').style.display = 'none';
     document.getElementById('modal-comments-section').style.display = 'none';
     
-    document.getElementById('task-modal').style.display = 'block';
-
-    const archiveBtn = document.querySelector('.btn-archive');
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
 
     archiveBtn.textContent = 'В архив';
-
     archiveBtn.onclick = archiveCurrentTask;
-}
 
+    archiveBtn.style.display = 'none';
+    backlogBtn.style.display = 'none';
+    restoreBtn.style.display = 'none';
+
+    document.getElementById('task-modal').style.display = 'block';
+}
 
 function openModalForEdit(id) {
     editingTaskId = id;
@@ -986,9 +996,11 @@ function openModalForEdit(id) {
     currentOpenedTask = task;
 
     const col = activeBoardData.columns.find(c => c.id === task.status);
-
     const locEl = document.getElementById('modal-location');
-    const archiveBtn = document.querySelector('.btn-archive');
+    
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
 
     if (locEl) {
         if (col && col.archived) {
@@ -996,34 +1008,27 @@ function openModalForEdit(id) {
             archiveBtn.textContent = 'Извлечь на доску';
             archiveBtn.onclick = async () => {
                 const firstCol = activeBoardData.columns.find(c => !c.archived);
-                if (!firstCol) {
-                    alert('Нет активных колонок!');
-                    return;
-                }
-                
+                if (!firstCol) { alert('Нет активных колонок!'); return; }
                 task.status = firstCol.id;
-                await fetch(`/api/tasks/${task.id}`, { 
-                    method: 'PUT', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify(task) 
-                });
-                
+                await fetch(`/api/tasks/${task.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(task) });
                 closeModal();
                 await loadTasks();
-                
-                if (currentArchivedColId) {
-                    openArchivedColumnModal(currentArchivedColId);
-                }
+                if (currentArchivedColId) openArchivedColumnModal(currentArchivedColId);
             };
+            backlogBtn.style.display = 'none';
+            restoreBtn.style.display = 'none';
+            archiveBtn.style.display = 'block';
         } else {
             locEl.innerText = col ? col.name : task.status;
             archiveBtn.textContent = 'В архив';
             archiveBtn.onclick = archiveCurrentTask;
+            backlogBtn.style.display = 'block';
+            restoreBtn.style.display = 'none';
+            archiveBtn.style.display = 'block';
         }
     }
 
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
-
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
     document.getElementById('modal-date').value = task.date || '';
@@ -1057,6 +1062,10 @@ function closeModal() {
 
 
 async function saveTask() {
+    const isBacklogCreation = targetColumnStatus === 'backlog_creation';
+    const activeCols = activeBoardData && activeBoardData.columns ? activeBoardData.columns.filter(c => !c.archived) : [];
+    const defaultCol = activeCols.length > 0 ? activeCols[0].id : 'todo';
+
     const payload = {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
@@ -1064,9 +1073,8 @@ async function saveTask() {
         date: document.getElementById('modal-date').value,
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: editingTaskId
-            ? currentOpenedTask.status
-            : targetColumnStatus
+        status: isBacklogCreation ? defaultCol : (editingTaskId ? currentOpenedTask.status : targetColumnStatus),
+        backlog: isBacklogCreation ? 1 : 0
     };
     
     if (editingTaskId) await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
@@ -1074,10 +1082,8 @@ async function saveTask() {
     
     closeModal();
 
-    // Обновление отображения архива, если окно аналитики открыто
-    if (document.getElementById('analytics-archive-view').style.display === 'block') {
-        await window.openArchiveViewer();
-    }
+    if (document.getElementById('analytics-archive-view').style.display === 'block') await window.openArchiveViewer();
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') await window.openBacklogViewer();
 }
 
 async function archiveCurrentTask() {
@@ -1500,35 +1506,31 @@ window.openTaskChat = function() {
 async function openTaskFromChat(taskId) {
     try {
         const res = await fetch(`/api/tasks/${taskId}`);
-        
-        // Обрабатываем 404 статус до того, как он вызовет ошибку парсинга JSON
         if (res.status === 404) {
             alert('Эта задача была удалена из доски');
             return;
         }
-        
         if (!res.ok) {
             alert('Не удалось загрузить задачу');
             return;
         }
         
         const task = await res.json();
-        
-        // Проверяем, присутствует ли задача в списке активных задач текущей доски
         const isActive = currentTasks.some(t => t.id == task.id);
         
         if (isActive) {
-            // Если задача активна, открываем стандартное модальное окно редактирования
             openModalForEdit(task.id);
-        } else {
-            // Если задачи нет среди активных, открываем её как архивную
+        } else if (task.archived === 1) {
             window.openModalForArchived(task);
+        } else if (task.backlog === 1) {
+            window.openModalForBacklog(task);
         }
         
     } catch (err) {
         console.log('Сетевая ошибка при получении задачи:', err);
     }
 }
+
 
 function toggleTaskComments() {
     const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
@@ -1627,3 +1629,142 @@ function scrollToTaskCommentsBottom(passedContainer = null) {
 }
 
 
+window.openBacklogViewer = async function () {
+    if (!activeBoardId) return;
+
+    const res = await fetch(`/api/boards/${activeBoardId}/backlog`);
+    if (!res.ok) return;
+
+    const tasks = await res.json();
+
+    const list = document.getElementById('backlog-tasks-list');
+    if (list) {
+        list.innerHTML = '';
+        tasks.forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.dataset.id = task.id;
+
+            const dateStr = task.date ? new Date(task.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+
+            card.innerHTML = `
+                <div class="card-top">
+                    <span>${task.title}</span>
+                    <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                </div>
+                <div class="card-meta-info">
+                    <div>👤 ${task.assignee || '—'}</div>
+                    <div>📅 ${dateStr}</div>
+                </div>
+            `;
+            card.onclick = () => window.openModalForBacklog(task);
+            list.appendChild(card);
+        });
+    }
+
+    document.querySelector('#view-analytics .folders-grid').style.display = 'none';
+    const logsView = document.getElementById('analytics-logs-view');
+    if (logsView) logsView.style.display = 'none';
+    const archiveView = document.getElementById('analytics-archive-view');
+    if (archiveView) archiveView.style.display = 'none';
+
+    document.getElementById('analytics-backlog-view').style.display = 'block';
+};
+
+window.closeBacklogViewer = function () {
+    document.querySelector('#view-analytics .folders-grid').style.display = 'grid';
+    document.getElementById('analytics-backlog-view').style.display = 'none';
+};
+
+window.openModalForBacklog = function (task) {
+    currentOpenedTask = task;
+    editingTaskId = task.id;
+
+    document.getElementById('modal-title').value = task.title;
+    document.getElementById('modal-assignee').value = task.assignee || '';
+    document.getElementById('modal-date').value = task.date || '';
+    document.getElementById('modal-priority').value = task.priority || 'Средняя';
+    document.getElementById('modal-description').value = task.description || '';
+    document.getElementById('modal-location').innerText = 'Бэклог';
+
+    document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
+
+    document.getElementById('modal-link-task-btn').style.display = 'inline-block';
+    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
+    document.getElementById('modal-comments-section').style.display = 'none';
+
+    const commentsList = document.getElementById('task-comments-list');
+    if (commentsList) commentsList.innerHTML = '';
+    const commentInput = document.getElementById('task-comment-input');
+    if (commentInput) commentInput.value = '';
+
+    loadTaskComments(task.id);
+
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
+
+    archiveBtn.textContent = 'В архив';
+    archiveBtn.onclick = archiveCurrentTask;
+    
+    archiveBtn.style.display = 'block';
+    backlogBtn.style.display = 'none';
+    restoreBtn.style.display = 'block';
+
+    document.getElementById('task-modal').style.display = 'block';
+};
+
+async function sendCurrentTaskToBacklog() {
+    if (!editingTaskId) return;
+    
+    const payload = {
+        board_id: activeBoardId,
+        title: document.getElementById('modal-title').value || 'Без названия',
+        assignee: document.getElementById('modal-assignee').value,
+        date: document.getElementById('modal-date').value,
+        priority: document.getElementById('modal-priority').value,
+        description: document.getElementById('modal-description').value,
+        status: currentOpenedTask.status
+    };
+
+    await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+    await fetch(`/api/tasks/${editingTaskId}/backlog`, { method: 'PUT' });
+    
+    closeModal();
+    await loadTasks();
+}
+
+window.toggleBoardColumnSelect = function(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('board-column-select');
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+    }
+    
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+    dropdown.innerHTML = '';
+    activeCols.forEach(col => {
+        const btn = document.createElement('button');
+        btn.innerText = col.name;
+        btn.onclick = () => restoreTaskFromBacklog(editingTaskId, col.id);
+        dropdown.appendChild(btn);
+    });
+    
+    dropdown.style.display = 'block';
+};
+
+async function restoreTaskFromBacklog(taskId, columnId) {
+    await fetch(`/api/tasks/${taskId}/restore_from_backlog`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: columnId })
+    });
+    
+    document.getElementById('board-column-select').style.display = 'none';
+    closeModal();
+    await loadTasks();
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') {
+        await window.openBacklogViewer();
+    }
+}

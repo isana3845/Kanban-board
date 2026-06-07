@@ -166,24 +166,23 @@
                 </main>
 
                 <main class="folders-content" id="view-analytics" style="display:none;">
-
                     <div class="folders-grid">
-
                         <div class="log-folder-card" onclick="openLogsViewer()">
                             <div class="log-folder-icon"></div>
                             <div class="log-folder-title">Журнал действий</div>
                         </div>
-
                         <div class="log-folder-card" onclick="openArchiveViewer()">
                             <div class="archive-folder-icon"></div>
                             <div class="log-folder-title">Архив задач</div>
                         </div>
-
+                        <div class="log-folder-card" onclick="openBacklogViewer()">
+                            <div class="backlog-folder-icon"></div>
+                            <div class="log-folder-title">Бэклог</div>
+                        </div>
                         <div class="log-folder-card">
                             <div class="gantt-folder-icon"></div>
                             <div class="log-folder-title">Диаграмма Ганта</div>
                         </div>
-
                     </div>
 
                     <div id="analytics-logs-view" style="display:none;margin-top:25px;">
@@ -197,7 +196,13 @@
                         <div id="archive-tasks-list" style="margin-top:20px;"></div>
                     </div>
 
+                    <div id="analytics-backlog-view" style="display:none;margin-top:25px;">
+                        <button class="btn-create-board" onclick="closeBacklogViewer()">← Назад</button>
+                        <button class="btn-create-board" onclick="openModalForCreate('backlog_creation')" style="margin-left:10px; background-color: #0000ff;">+ Новая задача</button>
+                        <div id="backlog-tasks-list" style="margin-top:20px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;"></div>
+                    </div>
                 </main>
+
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
@@ -269,9 +274,17 @@
                 <div class="mock-logs" id="modal-logs"></div>
                 
                 <div class="modal-save-panel">
-                    <button class="btn-archive" onclick="archiveCurrentTask()">В архив</button>
+                    <div style="display: flex; gap: 8px; flex: 1;">
+                        <div style="position: relative;">
+                            <button class="btn-restore" id="btn-restore-board" style="display:none;" onclick="toggleBoardColumnSelect(event)">На доску</button>
+                            <div id="board-column-select" class="dropdown-menu" style="display:none; bottom: 100%; top: auto; left: 0; margin-bottom: 5px; width: 180px; z-index: 3000;"></div>
+                        </div>
+                        <button class="btn-backlog" id="btn-to-backlog" onclick="sendCurrentTaskToBacklog()">В бэклог</button>
+                        <button class="btn-archive" id="btn-to-archive" onclick="archiveCurrentTask()">В архив</button>
+                    </div>
                     <button class="btn-save" onclick="saveTask()">Сохранить</button>
                 </div>
+
             </div>
 
         </div>

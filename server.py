@@ -29,6 +29,8 @@ def init_db():
 
     if not has_column("tasks", "archived"): db.execute("ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0")
     if not has_column("tasks", "previous_status"): db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
+    if not has_column("tasks", "backlog"): db.execute("ALTER TABLE tasks ADD COLUMN backlog INTEGER DEFAULT 0")
+    if not has_column("tasks", "sort_order"): db.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
     
     if not has_column("boards", "columns_data"): 
         db.execute("ALTER TABLE boards ADD COLUMN columns_data TEXT")
@@ -41,6 +43,7 @@ def init_db():
 
     db.commit()
     db.close()
+
 
 init_db()
 
@@ -96,6 +99,7 @@ class TaskData(BaseModel):
     priority: str = "Средняя"
     description: str = ""
     status: str
+    backlog: int = 0
 
 class ReorderPayload(BaseModel):
     status: str
@@ -109,6 +113,9 @@ class BoardWipPayload(BaseModel):
 
 class TaskCommentData(BaseModel):
     content: str
+
+class RestoreBacklogPayload(BaseModel):
+    status: str
 
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
@@ -250,26 +257,15 @@ def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[
 @app.get("/api/tasks")
 def get_tasks(board_id: int, session: Optional[str] = Cookie(None)):
     db = get_db()
-
-    access = db.execute(
-        "SELECT 1 FROM board_members WHERE board_id=? AND username=?",
-        (board_id, session)
-    ).fetchone()
-
-    if not access:
-        raise HTTPException(status_code=403)
-
+    access = db.execute("SELECT 1 FROM board_members WHERE board_id=? AND username=?", (board_id, session)).fetchone()
+    if not access: raise HTTPException(status_code=403)
+    
     tasks = db.execute(
-        """
-        SELECT *
-        FROM tasks
-        WHERE board_id=? AND archived=0
-        ORDER BY status, sort_order
-        """,
+        """SELECT * FROM tasks WHERE board_id=? AND archived=0 AND backlog=0 ORDER BY status, sort_order""",
         (board_id,)
     ).fetchall()
-
     return [dict(row) for row in tasks]
+
 
 @app.get("/api/tasks/{task_id}")
 def get_task(task_id: int, session: Optional[str] = Cookie(None)):
@@ -296,59 +292,16 @@ def get_task(task_id: int, session: Optional[str] = Cookie(None)):
 @app.post("/api/tasks")
 async def create_task(data: TaskData, session: Optional[str] = Cookie(None)):
     db = get_db()
-
-    max_order = db.execute(
-        """
-        SELECT COALESCE(MAX(sort_order), -1)
-        FROM tasks
-        WHERE board_id=? AND status=? AND archived=0
-        """,
-        (data.board_id, data.status)
-    ).fetchone()[0]
-
+    max_order = db.execute("SELECT COALESCE(MAX(sort_order), -1) FROM tasks WHERE board_id=? AND status=? AND archived=0 AND backlog=0", (data.board_id, data.status)).fetchone()[0]
     sort_order = max_order + 1
 
     cur = db.execute(
-        """
-        INSERT INTO tasks (
-            board_id,
-            title,
-            assignee,
-            date,
-            priority,
-            description,
-            status,
-            creator,
-            created_at,
-            sort_order
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            data.board_id,
-            data.title,
-            data.assignee,
-            data.date,
-            data.priority,
-            data.description,
-            data.status,
-            session,
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
-            sort_order
-        )
+        """INSERT INTO tasks (board_id, title, assignee, date, priority, description, status, backlog, creator, created_at, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (data.board_id, data.title, data.assignee, data.date, data.priority, data.description, data.status, data.backlog, session, datetime.now().strftime("%Y-%m-%d %H:%M"), sort_order)
     )
-
-    add_log(
-        db,
-        data.board_id,
-        session,
-        f"Создал(а) задачу '{data.title}'"
-    )
-
+    add_log(db, data.board_id, session, f"Создал(а) задачу '{data.title}'")
     db.commit()
-
     await manager.broadcast_update(data.board_id)
-
     return {"id": cur.lastrowid}
 
 # @app.put("/api/tasks/{task_id}")
@@ -779,6 +732,34 @@ def add_task_comment(task_id: int, data: TaskCommentData, session: Optional[str]
     add_log(db, task['board_id'], session, f"Оставил(а) комментарий к задаче '{task['title']}'")
     db.commit()
     
+    return {"status": "ok"}
+
+@app.get("/api/boards/{board_id}/backlog")
+def get_backlog(board_id: int):
+    db = get_db()
+    tasks = db.execute("SELECT * FROM tasks WHERE board_id=? AND backlog=1 AND archived=0 ORDER BY id DESC", (board_id,)).fetchall()
+    return [dict(row) for row in tasks]
+
+@app.put("/api/tasks/{task_id}/backlog")
+async def put_to_backlog(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task: raise HTTPException(status_code=404)
+    db.execute("UPDATE tasks SET backlog=1 WHERE id=?", (task_id,))
+    add_log(db, task["board_id"], session, f"Отправил(а) задачу '{task['title']}' в бэклог")
+    db.commit()
+    await manager.broadcast_update(task["board_id"])
+    return {"status": "ok"}
+
+@app.put("/api/tasks/{task_id}/restore_from_backlog")
+async def restore_from_backlog(task_id: int, data: RestoreBacklogPayload, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task: raise HTTPException(status_code=404)
+    db.execute("UPDATE tasks SET backlog=0, status=? WHERE id=?", (data.status, task_id))
+    add_log(db, task["board_id"], session, f"Переместил(а) задачу '{task['title']}' из бэклога на доску")
+    db.commit()
+    await manager.broadcast_update(task["board_id"])
     return {"status": "ok"}
 
 
