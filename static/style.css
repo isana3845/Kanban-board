@@ -865,3 +865,46 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
     text-overflow: ellipsis;
     width: 100%;
 }
+
+/* --- ЗОНЫ СБРОСА (DRAG & DROP) ДЛЯ БЭКЛОГА И АРХИВА --- */
+.side-dropzone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    background: #b3b3b3;
+    border: 2px dashed #666;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Анимация: плавно и медленно на старте, резкое ускорение к концу раскрытия */
+    transition: width 0.1s cubic-bezier(0.55, 0.05, 0.68, 0.19), background-color 0.2s;
+    cursor: pointer;
+}
+
+.side-dropzone-left {
+    left: -25px;
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+}
+
+.side-dropzone-right {
+    right: -25px;
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+}
+
+
+.side-dropzone .dropzone-icon {
+    font-size: 18px;
+    color: #333;
+    pointer-events: none;
+}
+
+/* Раскрытое состояние зоны при перетаскивании задачи */
+.side-dropzone.drag-active {
+    width: 140px;
+    background: #d9d9d9;
+    border-color: #0000ff;
+}

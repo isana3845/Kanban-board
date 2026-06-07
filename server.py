@@ -137,6 +137,9 @@ class RestoreBacklogPayload(BaseModel):
 class LogData(BaseModel):
     action_desc: str
 
+class RestoreArchivePayload(BaseModel):
+    status: str
+
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
 def login(data: AuthData, response: Response):
@@ -525,7 +528,7 @@ async def archive_task(task_id:int, session:Optional[str]=Cookie(None)):
     return {"status":"ok"}
 
 @app.put("/api/tasks/{task_id}/restore")
-async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
+async def restore_task(task_id: int, payload: RestoreArchivePayload, session: Optional[str] = Cookie(None)):
     db = get_db()
 
     task = db.execute(
@@ -536,14 +539,10 @@ async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
     if not task:
         raise HTTPException(status_code=404)
 
+    # Обновляем флаг архива и устанавливаем конкретную колонку
     db.execute(
-        """
-        UPDATE tasks
-        SET archived=0,
-            status=previous_status
-        WHERE id=?
-        """,
-        (task_id,)
+        "UPDATE tasks SET archived=0, status=? WHERE id=?",
+        (payload.status, task_id)
     )
 
     add_log(
@@ -554,7 +553,6 @@ async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
     )
 
     db.commit()
-
     await manager.broadcast_update(task["board_id"])
 
     return {"status": "ok"}
@@ -597,36 +595,6 @@ def clear_archive(board_id: int, session: Optional[str] = Cookie(None)):
     db.commit()
 
     return {"status":"ok"}
-
-
-@app.put("/api/tasks/{task_id}/restore")
-async def restore_task(task_id: int, session: Optional[str] = Cookie(None)):
-    db = get_db()
-
-    task = db.execute(
-        "SELECT * FROM tasks WHERE id=?",
-        (task_id,)
-    ).fetchone()
-
-    if not task:
-        raise HTTPException(status_code=404)
-
-    db.execute(
-        "UPDATE tasks SET archived=0, status=previous_status WHERE id=?",
-        (task_id,)
-    )
-
-    add_log(
-        db,
-        task["board_id"],
-        session,
-        f"Восстановил(а) задачу '{task['title']}' из архива"
-    )
-
-    db.commit()
-    await manager.broadcast_update(task["board_id"])
-
-    return {"status": "ok"}
 
 @app.delete("/api/tasks/{task_id}")
 async def delete_task(task_id: int, session: Optional[str] = Cookie(None)):

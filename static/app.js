@@ -14,6 +14,7 @@ let columnSortable = null;
 let currentArchivedColId = null;
 let searchTimeout = null;
 let activeTaskCheckpoints = [];
+let isDraggingTask = false;
 
 // Переменные для прикрепленной к чату задачи
 let linkedChatTaskId = null;
@@ -28,6 +29,7 @@ const statusMap = {
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     initListeners();
+    initDropzoneTooltips();
 });
 
 async function checkAuth() {
@@ -931,6 +933,34 @@ function setupDragAndDrop() {
         el.sortableInstance = new Sortable(el, {
             group: 'kanban',
             animation: 150,
+            onStart: () => { isDraggingTask = true; },
+            onEnd: async (e) => {
+                isDraggingTask = false;
+                const taskId = e.item.dataset.id;
+                const nextStatus = e.to.dataset.status;
+
+                // Обработка сброса в боковые панели (Бэклог / Архив)
+                if (e.to.classList.contains('side-dropzone')) {
+                    const target = e.to.dataset.target;
+                    e.item.style.display = 'none'; // Немедленно скрываем карточку
+                    e.to.classList.remove('drag-active');
+                    document.getElementById('drag-tooltip').style.display = 'none';
+
+                    if (target === 'backlog') {
+                        await fetch(`/api/tasks/${taskId}/backlog`, { method: 'PUT' });
+                    } else if (target === 'archive') {
+                        await fetch(`/api/tasks/${taskId}/archive`, { method: 'PUT' });
+                    }
+                    await loadTasks();
+                    return;
+                }
+
+                const task = currentTasks.find(t => t.id == taskId);
+                if (task && task.status !== nextStatus) {
+                    task.status = nextStatus;
+                    await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(task) });
+                }
+            },
             put: function (to, from) {
                 if (to.el === from.el) return true;
                 if (!activeBoardData || !activeBoardData.wip_enabled) return true;
@@ -938,16 +968,19 @@ function setupDragAndDrop() {
                 if (!limit || limit <= 0) return true;
                 const currentCount = currentTasks.filter(t => t.status === col.id).length;
                 return currentCount < limit;
-            },
-            onEnd: async (e) => {
-                const taskId = e.item.dataset.id;
-                const nextStatus = e.to.dataset.status;
-                const task = currentTasks.find(t => t.id == taskId);
-                if (task && task.status !== nextStatus) {
-                    task.status = nextStatus;
-                    await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(task) });
-                }
             }
+        });
+    });
+
+    // Инициализация боковых зон как валидных приемников Sortable
+    ['dropzone-backlog', 'dropzone-archive'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.sortableInstance) el.sortableInstance.destroy();
+
+        el.sortableInstance = new Sortable(el, {
+            group: 'kanban',
+            animation: 150
         });
     });
 
@@ -972,6 +1005,7 @@ function setupDragAndDrop() {
         }
     });
 }
+
 
 // Полная замена функции openModalForCreate (с учетом добавленных в следующем шаге переменных для чекпоинтов)
 function openModalForCreate(status) {
@@ -1485,7 +1519,6 @@ window.openModalForArchived = function(task) {
 
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
     
-    // Сброс боковой панели комментариев в исходное состояние
     document.getElementById('modal-comments-section').style.display = 'none';
     document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
@@ -1510,34 +1543,15 @@ window.openModalForArchived = function(task) {
     archiveBtn.textContent = 'В архив';
     archiveBtn.style.display = 'none';
     
-    // Включаем кнопку "В бэклог" в архиве
     backlogBtn.style.display = 'block'; 
     restoreBtn.style.display = 'block';
 
-    // Подменяем обработчик восстановления, чтобы он сразу обращался к нужному API (минуя выбор колонки)
-    restoreBtn.onclick = async function(event) {
-        event.stopPropagation();
-        
-        // Гарантированно скрываем меню выбора колонок (на случай, если оно было закешировано)
-        const colSelect = document.getElementById('board-column-select');
-        if (colSelect) colSelect.style.display = 'none';
-        
-        if (!confirm('Вернуть задачу на доску?')) return;
-        
-        const res = await fetch(`/api/tasks/${editingTaskId}/restore`, { method: 'PUT' });
-        if (res.ok) {
-            closeModal();
-            await loadTasks();
-            if (document.getElementById('analytics-archive-view').style.display === 'block') {
-                await window.openArchiveViewer();
-            }
-        } else {
-            alert('Ошибка восстановления задачи');
-        }
-    };
+    // Используем общее меню выбора колонок вместо прямого восстановления
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     document.getElementById('task-modal').style.display = 'block';
 }
+
 
 
 // Универсальная функция открытия чата для текущей открытой задачи (активной или архивной)
@@ -1841,7 +1855,14 @@ window.toggleBoardColumnSelect = function(event) {
     activeCols.forEach(col => {
         const btn = document.createElement('button');
         btn.innerText = col.name;
-        btn.onclick = () => restoreTaskFromBacklog(editingTaskId, col.id);
+        btn.onclick = () => {
+            // Определение источника задачи по ее статусу и перенаправление в правильную функцию
+            if (currentOpenedTask && currentOpenedTask.archived === 1) {
+                restoreTaskFromArchive(editingTaskId, col.id);
+            } else {
+                restoreTaskFromBacklog(editingTaskId, col.id);
+            }
+        };
         dropdown.appendChild(btn);
     });
     
@@ -2020,5 +2041,76 @@ function getCheckpointsProgressHtml(checkpointsStr) {
         `;
     } catch(e) {
         return '';
+    }
+}
+
+function initDropzoneTooltips() {
+    const tooltip = document.getElementById('drag-tooltip');
+    if (!tooltip) return;
+
+    const zones = [
+        { id: 'dropzone-backlog', text: 'Перенести в Бэклог' },
+        { id: 'dropzone-archive', text: 'Перенести в Архив' }
+    ];
+
+    zones.forEach(z => {
+        const el = document.getElementById(z.id);
+        if (!el) return;
+
+        // Обработка обычного наведения (без перетаскивания)
+        el.addEventListener('mousemove', (e) => {
+            tooltip.innerText = z.text;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.pageX + 'px';
+            tooltip.style.top = (e.pageY - 15) + 'px';
+
+            if (isDraggingTask) {
+                el.classList.add('drag-active');
+            }
+        });
+
+        el.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+
+        // Обработка наведения в процессе активного перетаскивания (Drag & Drop)
+        el.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Обязательно для разрешения drop и отключения блокирующего курсора
+            tooltip.innerText = z.text;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.pageX + 'px';
+            tooltip.style.top = (e.pageY - 15) + 'px';
+
+            if (isDraggingTask) {
+                el.classList.add('drag-active');
+            }
+        });
+
+        el.addEventListener('dragleave', (e) => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+
+        el.addEventListener('drop', () => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+    });
+}
+
+
+async function restoreTaskFromArchive(taskId, columnId) {
+    await fetch(`/api/tasks/${taskId}/restore`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: columnId })
+    });
+    
+    document.getElementById('board-column-select').style.display = 'none';
+    closeModal();
+    await loadTasks();
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
+        await window.openArchiveViewer();
     }
 }
