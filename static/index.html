@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Канбан-доска</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="data:,">
+    <script src="/Sortable.min.js"></script>
+</head>
+<body>
+
+    <div class="auth-overlay" id="auth-screen" style="display:none;">
+        <div class="auth-box">
+            <h2>Вход в систему</h2>
+            <input type="text" id="auth-username" placeholder="Ваш логин" onkeydown="if(event.key==='Enter') loginUser()">
+            <button onclick="loginUser()">Войти</button>
+        </div>
+    </div>
+
+    <div class="app-container" id="app-content" style="display: none;">
+        
+        <aside class="sidebar">
+            <div class="sidebar-logo"></div>
+            <nav class="sidebar-menu">
+                <div class="menu-item" id="menu-to-board" title="Текущая доска">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </div>
+                <div class="menu-item" id="menu-to-folders" title="Мои доски">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                </div>
+                <div class="menu-item" id="menu-to-analytics" title="Хаб доски">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+                <div class="menu-item" id="menu-to-settings" title="Настройки">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </div>
+            </nav>
+        </aside>
+
+
+        <div class="main-layout">
+            
+            <header class="header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h1 class="board-title" id="main-board-title">Выберите доску...</h1>
+                    <button id="edit-board-title-btn" onclick="renameCurrentBoard()" style="display: none; background: none; border: none; cursor: pointer; font-size: 16px;" title="Переименовать доску">✏️</button>
+                </div>
+                <div class="header-actions">
+                    
+                    <div class="search-container">
+                        <input type="text" class="search-input" placeholder="Поиск задачи">
+                        <button class="search-btn">🔍</button>
+                    </div>
+
+                    <div class="header-controls">
+                        <div class="control-wrapper">
+                            <div class="user-profile-trigger" id="avatar-trigger">
+                                <div class="avatar">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                </div>
+                                <span class="header-username" id="header-username-text">Вход</span>
+                            </div>
+                            
+                            <div class="dropdown-menu wide-dropdown" id="user-dropdown">
+                                <div class="dropdown-header"><strong id="user-display-name">---</strong></div>
+                                <hr>
+                                <div id="user-board-actions" style="display: none;">
+                                    <div class="add-member-form">
+                                        <input type="text" id="new-member-name" placeholder="Логин пользователя">
+                                        <button onclick="addMember()">Добавить</button>
+                                    </div>
+                                    <hr>
+                                    <div class="members-section-title">Участники доски:</div>
+                                    <ul class="members-list" id="connected-members-list"></ul>
+                                    <hr>
+                                    <button onclick="leaveCurrentBoard()" class="dropdown-btn text-red" style="width: 100%; text-align: left;">Покинуть доску</button>
+                                    <button id="delete-board-btn" onclick="deleteCurrentBoard()" class="dropdown-btn text-red" style="display:none;margin-top:8px;">Удалить доску</button>
+                                    <hr>
+                                </div>
+                                <div id="user-no-board-msg" style="padding: 15px; text-align: center; color: #777; font-size: 13px;">
+                                    Выберите доску
+                                </div>
+                                <button onclick="logoutUser()" class="dropdown-btn text-red">Выйти из аккаунта</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+
+            <div class="view-container">
+                
+                <main class="board-content" id="view-kanban" style="display: none;">
+                    
+                    <div class="toolbar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px;">
+                        <div class="control-wrapper" style="display: flex; gap: 10px;">
+                            <button class="chat-toggle-btn" onclick="toggleColumnMenu('filter-sort-dropdown', event)">Управление задачами 🔽</button>
+                            <button class="chat-toggle-btn" onclick="createNewColumn()" style="background-color: #8c8c8c;">+ Новая колонка</button>
+                            
+                            <div class="dropdown-menu" id="filter-sort-dropdown" style="width: 280px; left: 0; right: auto; padding: 15px;" onclick="event.stopPropagation()">
+                                <div style="display: flex; flex-direction: column;">
+                                    <div class="wip-title">Сортировка:</div>
+                                    <select class="sort-select" style="width:100%; margin-bottom: 15px;" onchange="applySort(this.value)">
+                                        <option value="none">По умолчанию</option>
+                                        <option value="user">По пользователю</option>
+                                        <option value="date">По дедлайну</option>
+                                        <option value="priority">По важности</option>
+                                    </select>
+                                    
+                                    <hr style="margin-bottom: 10px;">
+                                    
+                                    <div class="wip-title">Исполнитель:</div>
+                                    <div id="filter-assignees" style="max-height: 90px; overflow-y:auto; margin-bottom:10px; font-size:13px;"></div>
+                                    
+                                    <div class="wip-title">Важность:</div>
+                                    <div style="font-size:13px; margin-bottom:10px;">
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Высокая"> Высокая</label>
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Средняя"> Средняя</label>
+                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Низкая"> Низкая</label>
+                                    </div>
+
+                                    <div class="wip-title">Дедлайн:</div>
+                                    <select id="filter-deadline" style="width:100%; font-size:13px; margin-bottom:15px; padding: 5px;">
+                                        <option value="all">Любое время</option>
+                                        <option value="3">Ближайшие 3 дня</option>
+                                        <option value="7">Ближайшая неделя</option>
+                                        <option value="14">Ближайшие 2 недели</option>
+                                    </select>
+                                    
+                                    <div style="display: flex; gap: 8px;">
+                                        <button onclick="applyFilters()" style="flex: 1; padding: 6px; background: #0000ff; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Применить</button>
+                                        <button onclick="clearFilters()" style="flex: 1; padding: 6px; background: #cc0000; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Сбросить</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <button class="chat-toggle-btn" onclick="toggleChat()">💬 Чат доски</button>
+                    </div>
+
+                    <div class="board-columns"></div>
+
+                    <aside id="chat-sidebar" class="chat-sidebar" style="display: none;">
+                        <div class="chat-header">
+                            <h3>Чат доски</h3>
+                            <button onclick="toggleChat()">&times;</button>
+                        </div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <div class="chat-input-area">
+                            <div id="chat-task-preview" class="chat-task-preview" style="display: none;">
+                                <span id="chat-preview-title"></span>
+                                <button onclick="clearTaskPreview()">&times;</button>
+                            </div>
+                            <textarea id="chat-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }"></textarea>
+                            <button onclick="sendChatMessage()">Отправить</button>
+                        </div>
+                    </aside>
+                </main>
+
+                <main class="folders-content" id="view-folders" style="display: none;">
+                    <div class="folders-toolbar">
+                        <button class="btn-create-board" onclick="promptCreateBoard()">+ Создать доску</button>
+                    </div>
+                    <div class="folders-grid" id="folders-grid-container"></div>
+                </main>
+
+                <main class="folders-content" id="view-analytics" style="display:none;">
+
+                    <div class="folders-grid">
+
+                        <div class="log-folder-card" onclick="openLogsViewer()">
+                            <div class="log-folder-icon"></div>
+                            <div class="log-folder-title">Журнал действий</div>
+                        </div>
+
+                        <div class="log-folder-card" onclick="openArchiveViewer()">
+                            <div class="archive-folder-icon"></div>
+                            <div class="log-folder-title">Архив задач</div>
+                        </div>
+
+                        <div class="log-folder-card">
+                            <div class="gantt-folder-icon"></div>
+                            <div class="log-folder-title">Диаграмма Ганта</div>
+                        </div>
+
+                    </div>
+
+                    <div id="analytics-logs-view" style="display:none;margin-top:25px;">
+                        <button class="btn-create-board" onclick="closeLogsViewer()">← Назад</button>
+                        <div class="logs-container" id="analytics-logs-list" style="margin-top:20px;"></div>
+                    </div>
+
+                    <div id="analytics-archive-view" style="display:none;margin-top:25px;">
+                        <button class="btn-create-board" onclick="closeArchiveViewer()">← Назад</button>
+                        <button class="btn-create-board" onclick="clearArchive()" style="margin-left:10px;">Очистить архив</button>
+                        <div id="archive-tasks-list" style="margin-top:20px;"></div>
+                    </div>
+
+                </main>
+
+                <main class="folders-content" id="view-settings" style="display: none;">
+                    <h2>Настройки доски</h2>
+                    <div style="margin-top: 20px; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
+                        <div class="wip-toggle-box" style="font-size: 16px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()" style="margin-right: 10px; width: 18px; height: 18px;"> 
+                                Включить WIP лимиты
+                            </label>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация лимитов колонок для текущей доски.</p>
+                    </div>
+                </main>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="task-modal">
+        <div class="modal-card">
+            
+            <button class="modal-link-btn" id="modal-link-task-btn" onclick="linkTaskToChat()" title="Обсудить в чате" style="display: none;">↪️ В чат</button>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            
+            <div class="modal-body">
+                <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
+                
+                <div class="meta-grid">
+                    <div class="meta-label">Расположение</div>
+                    <div class="meta-value" id="modal-location"></div>
+                    
+                    <div class="meta-label">Исполнитель</div>
+                    <div class="meta-value flex-align">
+                        <span class="avatar-dot"></span><input type="text" id="modal-assignee">
+                    </div>
+                    
+                    <div class="meta-label">Дедлайн</div>
+                    <div class="meta-value flex-align">
+                        <span class="meta-icon">🗓️</span><input type="datetime-local" id="modal-date">
+                    </div>
+                    
+                    <div class="meta-label">Важность</div>
+                    <div class="meta-value flex-align">
+                        <select id="modal-priority">
+                            <option>Высокая</option>
+                            <option>Средняя</option>
+                            <option>Низкая</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
+                <div class="mock-logs" id="modal-logs"></div>
+                
+                <div class="modal-save-panel">
+                    <button class="btn-archive" onclick="archiveCurrentTask()">В архив</button>
+                    <button class="btn-save" onclick="saveTask()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-backdrop" id="col-archive-modal" style="display:none; z-index:700;">
+        <div style="margin: 60px auto; display:flex; flex-direction:column; align-items:center;">
+            <div class="column" style="width: 350px; background:#e6e6e6; border:2px solid #0000ff; padding:12px; display:flex; flex-direction:column; max-height:80vh;">
+                <div class="column-header" style="justify-content:center; position:relative;">
+                    <span class="column-name" id="archived-col-modal-name">Название</span>
+                    <button onclick="closeArchivedColumnModal()" style="position:absolute; right:0; top:-5px; background:none; border:none; font-size:20px; cursor:pointer;">&times;</button>
+                </div>
+                <div class="cards-dropzone" id="archived-col-tasks" style="flex:1; overflow-y:auto; min-height:150px; margin-bottom:15px;"></div>
+                <button onclick="restoreArchivedColumn()" style="background:#0000ff; color:white; border:none; padding:8px; margin-bottom:8px; cursor:pointer; font-weight:bold;">Вернуть на доску</button>
+                <button onclick="deleteArchivedColumn()" style="background:#cc0000; color:white; border:none; padding:8px; cursor:pointer; font-weight:bold;">Удалить навсегда</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
