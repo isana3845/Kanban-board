@@ -1,6 +1,6 @@
 import json
-from datetime import datetime
 from typing import Optional
+from pydantic import BaseModel
  
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,16 +34,19 @@ class TaskService:
             column_id: int,
             title: str,
             description: str = None,
-            assigned_to: User | None = None,
-            created_by: User | None = None
+            assigned_to: int | None = None,
+            created_by: int | None = None
         ) -> Task:
         position = await max_position(session, column_id) + 1
+        column = await session.get(BoardColumn, column_id)
         task = Task(
             column_id=column_id,
+            board_id=column.board_id if column else None,
             title=title,
             description=description,
             assigned_to=assigned_to,
-            position=position
+            position=position,
+            sort_order=position,
         )
 
         session.add(task)
@@ -116,6 +119,14 @@ class TaskService:
         await session.flush()
         await session.delete(task)
         await session.commit()
+    
+
+    @staticmethod
+    async def get_tasks(session: AsyncSession):
+        stmt = select(Task)
+        result = await session.execute(stmt)
+        r = [task[0].to_json() for task in result]
+        return r
 
 
 class BoardService:
@@ -133,3 +144,90 @@ class BoardService:
         await session.refresh(board)
 
         return board
+
+
+class UserService:
+    @staticmethod
+    async def create(
+            session: AsyncSession,
+            user_id: int,
+            username: str,
+            email: str,
+            assigned_tasks_ids: Optional[list[int]] = None
+        ) -> User:t
+        user = User(
+            id=user_id,
+            username=username,
+            email=email
+        )
+        session.add(user)
+        await session.flush()
+        
+        if assigned_tasks_ids:
+            result = await session.execute(
+                select(Task).where(Task.id.in_(assigned_tasks_ids))
+            )
+            tasks = result.scalars().all()
+            for task in tasks:
+                task.assigned_to = user.id
+        
+        await session.commit()
+        await session.refresh(user)
+        
+        return user.to_json()
+
+    @staticmethod
+    async def get_user(user_id: int, session: AsyncSession):
+        stmt = select(User).where(User.id == user_id)
+        result = await session.scalars(stmt)
+
+        return result.one_or_none()
+
+    @staticmethod
+    async def get_users(session: AsyncSession):
+        stmt = select(User)
+        result = await session.execute(stmt)
+        r = [user[0].to_json() for user in result]
+        return r
+    
+    @staticmethod
+    async def delete(user_id: int, session: AsyncSession):
+        user = await session.get(User, user_id)
+        if user is None:
+            raise ValueError(f"Участник с id {user_id} не найден")
+        
+        # await log(session, task_id, "deleted", user_id=user_id, detail={"title": task.title})
+
+        await session.flush()
+        await session.delete(user)
+        await session.commit()
+    
+    @staticmethod
+    async def update_user_info(user_id: int, username: str, email: str, session: AsyncSession):
+        stmt = update(User).where(User.id == user_id).values(
+            username=username,
+            email=email
+        )
+        result = await session.execute(stmt)
+        await session.commit()
+        return result.rowcount > 0
+    
+
+class UserCreate(BaseModel):
+    user_id: int
+    username: str
+    email: str
+    assigned_tasks_ids: Optional[list[int]] = None
+
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str]
+    assigned_to: Optional[int] = None
+    column_id: Optional[int] = None
+
+
+class UserUpdate(BaseModel):
+    user_id: int
+    username: str
+    email: str
