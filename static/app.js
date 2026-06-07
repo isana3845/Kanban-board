@@ -182,7 +182,6 @@ function renderColumns() {
                 </div>
                 <div class="column-controls control-wrapper">
                     <div class="drag-handle" title="Перетащите, чтобы изменить порядок колонок"></div>
-                    <button onclick="openModalForCreate('${col.id}')">+</button>
                     <button onclick="toggleColumnMenu('menu-wip-${col.id}', event)">⋮</button>
                     <div class="dropdown-menu wip-menu" id="menu-wip-${col.id}" onclick="event.stopPropagation()">
                         <div class="wip-title">Название:</div>
@@ -279,7 +278,7 @@ function applyBoardSettingsToUI() {
 }
 
 // Новая единая функция для синхронизации колонок и WIP (заменяет старые saveWipLimits, renameColumn)
-async function syncBoardSettingsToServer() {
+window.syncBoardSettingsToServer = async function() {
     if (!activeBoardData) return;
 
     activeBoardData.columns.forEach(c => {
@@ -293,14 +292,23 @@ async function syncBoardSettingsToServer() {
 
     activeBoardData.columns_data = JSON.stringify(activeBoardData.columns);
 
+    // Формируем строгий payload для предотвращения 500 ошибки (Validation Error)
+    const payload = {
+        wip_enabled: activeBoardData.wip_enabled ? 1 : 0,
+        dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
+        columns_data: activeBoardData.columns_data
+    };
+
     await fetch(`/api/boards/${activeBoardId}/settings`, {
         method: 'PUT', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(activeBoardData)
+        body: JSON.stringify(payload)
     });
 
+    applyDropzonesVisibility();
     renderColumns();
-}
+};
+
 
 
 // Обновленная функция изменения числового лимита
@@ -575,6 +583,10 @@ function selectBoard(board) {
     
     document.getElementById('board-wip-toggle').checked = !!board.wip_enabled;
     
+    document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
+    applyDropzonesVisibility()
+
+
     switchView('board');
     renderColumns(); // Генерирует HTML колонок и вызывает setupDragAndDrop + renderBoardCards
     loadTasks();
@@ -1008,29 +1020,45 @@ function setupDragAndDrop() {
 
 
 // Полная замена функции openModalForCreate (с учетом добавленных в следующем шаге переменных для чекпоинтов)
-function openModalForCreate(status) {
+window.openModalForCreate = function(status = null) {
     if (!activeBoardId) return;
     editingTaskId = null;
     currentOpenedTask = null;
-    targetColumnStatus = status;
     
-    let colName = status;
+    const selectContainer = document.getElementById('modal-status-container');
+    const locContainer = document.getElementById('modal-location');
+    const select = document.getElementById('modal-status-select');
+    
+    select.innerHTML = ''; 
+    
     if (status === 'backlog_creation') {
-        colName = 'Бэклог';
-    } else if (activeBoardData && activeBoardData.columns) {
-        const col = activeBoardData.columns.find(c => c.id === status);
-        if (col) colName = col.name;
-    } else if (statusMap[status]) {
-        colName = statusMap[status];
+        targetColumnStatus = 'backlog_creation';
+        selectContainer.style.display = 'none';
+        locContainer.style.display = 'block';
+        locContainer.innerText = 'Бэклог';
+    } else {
+        selectContainer.style.display = 'flex';
+        locContainer.style.display = 'none';
+        
+        if (activeBoardData && activeBoardData.columns) {
+            const activeCols = activeBoardData.columns.filter(c => !c.archived);
+            activeCols.forEach(col => {
+                const opt = document.createElement('option');
+                opt.value = col.id;
+                opt.innerText = col.name;
+                select.appendChild(opt);
+            });
+            targetColumnStatus = select.value;
+        }
     }
-    
-    const locEl = document.getElementById('modal-location');
-    if (locEl) locEl.innerText = colName;
 
     document.getElementById('modal-link-task-btn').style.display = 'none'; 
     document.getElementById('modal-title').value = '';
     document.getElementById('modal-assignee').value = activeUser.username;
-    document.getElementById('modal-date').value = '';
+    
+    setModalDateFields('', 'modal-date', 'modal-time');
+    setModalDateFields('', 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-description').value = '';
     document.getElementById('modal-logs').innerHTML = 'Новая задача';
     
@@ -1041,18 +1069,14 @@ function openModalForCreate(status) {
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
 
-    archiveBtn.textContent = 'В архив';
-    archiveBtn.onclick = archiveCurrentTask;
-
     archiveBtn.style.display = 'none';
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'none';
-
-    // Возвращаем штатный обработчик на случай использования в других сценариях
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     document.getElementById('task-modal').style.display = 'block';
-}
+};
+
 
 
 function openModalForEdit(id) {
@@ -1071,7 +1095,6 @@ function openModalForEdit(id) {
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
 
-    // Возвращаем штатный обработчик
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     if (locEl) {
@@ -1103,11 +1126,17 @@ function openModalForEdit(id) {
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    document.getElementById('modal-date').value = task.date || '';
+    
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
     
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
+
     document.getElementById('modal-comments-section').style.display = 'none';
     document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
@@ -1122,6 +1151,7 @@ function openModalForEdit(id) {
     
     document.getElementById('task-modal').style.display = 'block';
 }
+
 
 
 
@@ -1144,7 +1174,7 @@ function closeModal() {
 
 
 
-async function saveTask() {
+window.saveTask = async function() {
     const isBacklogCreation = targetColumnStatus === 'backlog_creation';
     const activeCols = activeBoardData && activeBoardData.columns ? activeBoardData.columns.filter(c => !c.archived) : [];
     const defaultCol = activeCols.length > 0 ? activeCols[0].id : 'todo';
@@ -1153,10 +1183,11 @@ async function saveTask() {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
         assignee: document.getElementById('modal-assignee').value,
-        date: document.getElementById('modal-date').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: isBacklogCreation ? defaultCol : (editingTaskId ? currentOpenedTask.status : targetColumnStatus),
+        status: isBacklogCreation ? defaultCol : (editingTaskId ? currentOpenedTask.status : document.getElementById('modal-status-select').value),
         backlog: isBacklogCreation ? 1 : 0,
         checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
@@ -1165,20 +1196,22 @@ async function saveTask() {
     else await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
     
     closeModal();
+    await loadTasks();
 
     if (document.getElementById('analytics-archive-view').style.display === 'block') await window.openArchiveViewer();
     if (document.getElementById('analytics-backlog-view').style.display === 'block') await window.openBacklogViewer();
-}
+};
+
 
 async function archiveCurrentTask() {
     if (!editingTaskId) return;
 
-    // Сначала сохраняем внесенные изменения (решение задачи 1)
     const payload = {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
         assignee: document.getElementById('modal-assignee').value,
-        date: document.getElementById('modal-date').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
         status: currentOpenedTask.status,
@@ -1191,7 +1224,6 @@ async function archiveCurrentTask() {
         body: JSON.stringify(payload) 
     });
 
-    // Затем отправляем в архив
     const res = await fetch(`/api/tasks/${editingTaskId}/archive`, {
         method: 'PUT'
     });
@@ -1207,6 +1239,7 @@ async function archiveCurrentTask() {
     if (document.getElementById('analytics-archive-view').style.display === 'block')
         await window.openArchiveViewer();
 }
+
 
 
 async function leaveCurrentBoard() {
@@ -1510,12 +1543,18 @@ window.openModalForArchived = function(task) {
     
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    document.getElementById('modal-date').value = task.date || '';
+    
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
     document.getElementById('modal-location').innerText = 'Архив';
 
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
+
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
 
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
     
@@ -1546,11 +1585,11 @@ window.openModalForArchived = function(task) {
     backlogBtn.style.display = 'block'; 
     restoreBtn.style.display = 'block';
 
-    // Используем общее меню выбора колонок вместо прямого восстановления
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     document.getElementById('task-modal').style.display = 'block';
 }
+
 
 
 
@@ -1772,9 +1811,16 @@ window.openModalForBacklog = function (task) {
 
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    document.getElementById('modal-date').value = task.date || '';
+    
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
+    
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
+
     document.getElementById('modal-location').innerText = 'Бэклог';
 
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
@@ -1809,11 +1855,11 @@ window.openModalForBacklog = function (task) {
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'block';
 
-    // Возвращаем штатный обработчик для бэклога с выбором колонки
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     document.getElementById('task-modal').style.display = 'block';
 };
+
 
 async function sendCurrentTaskToBacklog() {
     if (!editingTaskId) return;
@@ -1822,7 +1868,8 @@ async function sendCurrentTaskToBacklog() {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
         assignee: document.getElementById('modal-assignee').value,
-        date: document.getElementById('modal-date').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
         status: currentOpenedTask.status,
@@ -1835,11 +1882,11 @@ async function sendCurrentTaskToBacklog() {
     closeModal();
     await loadTasks();
 
-    // Обновляем вью архива, если мы отправляли задачу оттуда
     if (document.getElementById('analytics-archive-view').style.display === 'block') {
         await window.openArchiveViewer();
     }
 }
+
 
 
 window.toggleBoardColumnSelect = function(event) {
@@ -2114,3 +2161,47 @@ async function restoreTaskFromArchive(taskId, columnId) {
         await window.openArchiveViewer();
     }
 }
+
+// Функция-обработчик тумблера боковых панелей
+window.toggleBoardDropzones = async function() {
+    if (!activeBoardData) return;
+    const isEnabled = document.getElementById('board-dropzones-toggle').checked ? 1 : 0;
+    activeBoardData.dropzones_enabled = isEnabled;
+    const actionDesc = isEnabled ? 'Включил(а) боковые зоны' : 'Отключил(а) боковые зоны';
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: actionDesc}) });
+    await syncBoardSettingsToServer();
+};
+
+// Функция переключения видимости боковых зон
+window.applyDropzonesVisibility = function() {
+    const dzLeft = document.getElementById('dropzone-backlog');
+    const dzRight = document.getElementById('dropzone-archive');
+    const isEnabled = activeBoardData && activeBoardData.dropzones_enabled !== 0; 
+    
+    if (!isEnabled) {
+        if (dzLeft) dzLeft.style.display = 'none';
+        if (dzRight) dzRight.style.display = 'none';
+    } else {
+        if (dzLeft) dzLeft.style.display = 'flex';
+        if (dzRight) dzRight.style.display = 'flex';
+    }
+};
+
+window.setModalDateFields = function(dateStr, dateId, timeId) {
+    if (dateStr) {
+        const parts = dateStr.split('T');
+        document.getElementById(dateId).value = parts[0];
+        document.getElementById(timeId).value = parts.length > 1 ? parts[1] : '00:00';
+    } else {
+        document.getElementById(dateId).value = '';
+        document.getElementById(timeId).value = '00:00';
+    }
+};
+
+window.getModalDateString = function(dateId, timeId) {
+    const dateVal = document.getElementById(dateId).value;
+    const timeVal = document.getElementById(timeId).value || '00:00';
+    return dateVal ? `${dateVal}T${timeVal}` : '';
+};
+
+

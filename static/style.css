@@ -863,7 +863,7 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    width: 100%;
+    /* width: 100%; */
 }
 
 /* --- ЗОНЫ СБРОСА (DRAG & DROP) ДЛЯ БЭКЛОГА И АРХИВА --- */
@@ -908,3 +908,4 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
     background: #d9d9d9;
     border-color: #0000ff;
 }
+

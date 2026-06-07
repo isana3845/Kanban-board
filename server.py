@@ -32,6 +32,8 @@ def init_db():
     if not has_column("tasks", "backlog"): db.execute("ALTER TABLE tasks ADD COLUMN backlog INTEGER DEFAULT 0")
     if not has_column("tasks", "sort_order"): db.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
     if not has_column("tasks", "checkpoints"): db.execute("ALTER TABLE tasks ADD COLUMN checkpoints TEXT DEFAULT '[]'")
+    if not has_column("boards", "dropzones_enabled"): db.execute("ALTER TABLE boards ADD COLUMN dropzones_enabled INTEGER DEFAULT 1")
+    if not has_column("tasks", "start_date"): db.execute("ALTER TABLE tasks ADD COLUMN start_date TEXT DEFAULT ''")
 
     
     if not has_column("boards", "columns_data"): 
@@ -105,6 +107,7 @@ class BoardData(BaseModel):
 
 class BoardSettingsUpdate(BaseModel):
     wip_enabled: int
+    dropzones_enabled: int = 1
     columns_data: str
 
 class TaskData(BaseModel):
@@ -112,6 +115,7 @@ class TaskData(BaseModel):
     title: str
     assignee: str = ""
     date: str = ""
+    start_date: str = ""
     priority: str = "Средняя"
     description: str = ""
     status: str
@@ -184,9 +188,12 @@ def create_board(data: BoardData, session: Optional[str] = Cookie(None)):
 @app.put("/api/boards/{board_id}/settings")
 async def update_board_settings(board_id: int, data: BoardSettingsUpdate, session: Optional[str] = Cookie(None)):
     db = get_db()
-    db.execute("UPDATE boards SET wip_enabled=?, columns_data=? WHERE id=? AND owner_username=?",
-        (data.wip_enabled, data.columns_data, board_id, session))
-    db.commit()
+    try:
+        db.execute("UPDATE boards SET wip_enabled=?, dropzones_enabled=?, columns_data=? WHERE id=? AND owner_username=?",
+            (data.wip_enabled, data.dropzones_enabled, data.columns_data, board_id, session))
+        db.commit()
+    finally:
+        db.close() # Строгое закрытие предотвращает Database is locked
     await manager.broadcast_update(board_id)
     return {"status": "ok"}
 
@@ -315,8 +322,8 @@ async def create_task(data: TaskData, session: Optional[str] = Cookie(None)):
     sort_order = max_order + 1
 
     cur = db.execute(
-        """INSERT INTO tasks (board_id, title, assignee, date, priority, description, status, backlog, checkpoints, creator, created_at, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (data.board_id, data.title, data.assignee, data.date, data.priority, data.description, data.status, data.backlog, data.checkpoints, session, datetime.now().strftime("%Y-%m-%d %H:%M"), sort_order)
+        """INSERT INTO tasks (board_id, title, assignee, date, start_date, priority, description, status, backlog, checkpoints, creator, created_at, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (data.board_id, data.title, data.assignee, data.date, data.start_date, data.priority, data.description, data.status, data.backlog, data.checkpoints, session, datetime.now().strftime("%Y-%m-%d %H:%M"), sort_order)
     )
     
     col_name = get_column_name(db, data.board_id, data.status)
@@ -394,8 +401,8 @@ async def update_task(task_id: int, data: TaskData, session: Optional[str] = Coo
     if not old_task: raise HTTPException(status_code=404, detail="Задача не найдена")
 
     db.execute(
-        """UPDATE tasks SET title=?, assignee=?, date=?, priority=?, description=?, status=?, checkpoints=? WHERE id=?""",
-        (data.title, data.assignee, data.date, data.priority, data.description, data.status, data.checkpoints, task_id)
+        """UPDATE tasks SET title=?, assignee=?, date=?, start_date=?, priority=?, description=?, status=?, checkpoints=? WHERE id=?""",
+        (data.title, data.assignee, data.date, data.start_date, data.priority, data.description, data.status, data.checkpoints, task_id)
     )
     db.execute("UPDATE messages SET linked_task_title = ? WHERE linked_task_id = ?", (data.title, task_id))
 
@@ -716,8 +723,11 @@ async def restore_from_backlog(task_id: int, data: RestoreBacklogPayload, sessio
 def create_custom_log(board_id: int, data: LogData, session: Optional[str] = Cookie(None)):
     if not session: raise HTTPException(status_code=401)
     db = get_db()
-    add_log(db, board_id, session, data.action_desc)
-    db.commit()
+    try:
+        add_log(db, board_id, session, data.action_desc)
+        db.commit()
+    finally:
+        db.close()
     return {"status": "ok"}
 
 # Эндпоинт глобального поиска

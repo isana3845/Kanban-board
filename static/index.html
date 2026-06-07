@@ -101,6 +101,7 @@
                         <div class="control-wrapper" style="display: flex; gap: 10px;">
                             <button class="chat-toggle-btn" onclick="toggleColumnMenu('filter-sort-dropdown', event)">Управление задачами 🔽</button>
                             <button class="chat-toggle-btn" onclick="createNewColumn()" style="background-color: #8c8c8c;">+ Новая колонка</button>
+                            <button class="chat-toggle-btn" onclick="openModalForCreate()" style="background-color: #0000ff;">+ Новая задача</button>
                             
                             <div class="dropdown-menu" id="filter-sort-dropdown" style="width: 280px; left: 0; right: auto; padding: 15px;" onclick="event.stopPropagation()">
                                 <div style="display: flex; flex-direction: column;">
@@ -196,6 +197,7 @@
                         <div class="log-folder-card">
                             <div class="gantt-folder-icon"></div>
                             <div class="log-folder-title">Диаграмма Ганта</div>
+                            <p>Coming soon</p>
                         </div>
                     </div>
 
@@ -220,6 +222,7 @@
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
+                    
                     <div style="margin: 20px 0; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
                         <div class="wip-toggle-box" style="font-size: 16px;">
                             <label style="display: flex; align-items: center; cursor: pointer;">
@@ -229,13 +232,23 @@
                         </div>
                         <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация лимитов колонок для текущей доски.</p>
                     </div>
+                        
+                    <div style="margin: 20px 0; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
+                        <div class="wip-toggle-box" style="font-size: 16px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="board-dropzones-toggle" onchange="toggleBoardDropzones()" style="margin-right: 10px; width: 18px; height: 18px;"> 
+                                Включить боковые зоны (Бэклог/Архив)
+                            </label>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация зон быстрого переноса для текущей доски.</p>
+                    </div>
 
                     <div class="settings-section">
                         <h2>Обратная связь</h2>
-                        <a href="https://forms.yandex.ru/..." target="_blank" class="feedback-btn" >Оставить отзыв</a>
+                        <a href="https://forms.yandex.ru/u/6a24fddbf47e7336edd5943d" target="_blank" class="feedback-btn" >Оставить отзыв</a>
                     </div>
+                
                 </main>
-
             </div>
         </div>
     </div>
@@ -264,18 +277,30 @@
             <div class="modal-body">
                 <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
                 
-                <div class="meta-grid">
+                                <div class="meta-grid">
                     <div class="meta-label">Расположение</div>
-                    <div class="meta-value" id="modal-location"></div>
+                    <div class="meta-value flex-align" id="modal-status-container">
+                        <select id="modal-status-select"></select>
+                    </div>
+                    <div class="meta-value" id="modal-location" style="display:none;"></div>
                     
                     <div class="meta-label">Исполнитель</div>
                     <div class="meta-value flex-align">
                         <span class="avatar-dot"></span><input type="text" id="modal-assignee">
                     </div>
                     
+                    <div class="meta-label">Дата начала</div>
+                    <div class="meta-value flex-align">
+                        <span class="meta-icon">▶️</span>
+                        <input type="date" id="modal-start-date" style="flex: 1;">
+                        <input type="time" id="modal-start-time" value="00:00" style="width: 85px;">
+                    </div>
+
                     <div class="meta-label">Дедлайн</div>
                     <div class="meta-value flex-align">
-                        <span class="meta-icon">🗓️</span><input type="datetime-local" id="modal-date">
+                        <span class="meta-icon">🗓️</span>
+                        <input type="date" id="modal-date" style="flex: 1;">
+                        <input type="time" id="modal-time" value="00:00" style="width: 85px;">
                     </div>
                     
                     <div class="meta-label">Важность</div>
@@ -287,14 +312,15 @@
                         </select>
                     </div>
                 </div>
+
                 
                 <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
                 
                 <div class="checkpoints-section" style="margin-bottom: 15px;">
-                    <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px;">Чекпоинты</div>
+                    <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px;">Чеклист</div>
                     <div id="checkpoints-list"></div>
                     <div style="display:flex; gap: 8px; margin-top: 8px;">
-                        <input type="text" id="new-checkpoint-input" placeholder="Новый чекпоинт" style="flex: 1; padding: 6px; font-size: 13px; border: 1px dashed #777; background: transparent; outline: none;">
+                        <input type="text" id="new-checkpoint-input" placeholder="Новый элемент чеклиста" style="flex: 1; padding: 6px; font-size: 13px; border: 1px dashed #777; background: transparent; outline: none;">
                         <button onclick="addCheckpoint()" style="background: #8c8c8c; color: #fff; border: none; padding: 0 12px; cursor: pointer; border-radius: 2px; font-weight: bold;">Добавить</button>
                     </div>
                 </div>
