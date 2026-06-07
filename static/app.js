@@ -12,6 +12,8 @@ let isGuest = true;
 let currentFilters = { assignees: [], priorities: [], deadline: 'all' };
 let columnSortable = null;
 let currentArchivedColId = null;
+let searchTimeout = null;
+let activeTaskCheckpoints = [];
 
 // Переменные для прикрепленной к чату задачи
 let linkedChatTaskId = null;
@@ -98,6 +100,7 @@ function handleLogin(userData) {
 
 
 function initListeners() {
+    initSearchListener()
     document.getElementById('menu-to-board').onclick = () => {
         if (activeBoardId) switchView('board');
         else alert('Выберите доску в меню папок.');
@@ -183,7 +186,7 @@ function renderColumns() {
                         <div class="wip-title">Название:</div>
                         <div class="wip-name-group">
                             <input type="text" id="rename-input-${col.id}" value="${col.name}" onclick="this.select()">
-                            <button onclick="syncBoardSettingsToServer()" class="btn-apply-rename">ОК</button>
+                            <button onclick="renameColumn('${col.id}')" class="btn-apply-rename">ОК</button>
                         </div>
                         <hr style="margin: 8px 0;">
                         <div class="wip-title">WIP Лимит (0 - нет):</div>
@@ -223,6 +226,7 @@ async function createNewColumn() {
     const colId = 'col_' + Date.now();
     activeBoardData.columns.push({ id: colId, name: name.trim(), wip_limit: 0, archived: false });
     
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Создал(а) новую колонку '${name.trim()}'`}) });
     await syncBoardSettingsToServer();
 }
 
@@ -297,13 +301,18 @@ async function syncBoardSettingsToServer() {
 }
 
 
-// Кнопки плюс/минус
+// Обновленная функция изменения числового лимита
 function changeWip(status, delta) {
     const input = document.getElementById(`wip-input-${status}`);
     let val = parseInt(input.value) || 0;
     val += delta;
     if (val < 0) val = 0;
     input.value = val;
+    
+    const col = activeBoardData.columns.find(c => c.id === status);
+    if (col) {
+        fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Изменил(а) WIP лимит в колонке '${col.name}' на ${val}`}) });
+    }
     syncBoardSettingsToServer();
 }
 
@@ -741,9 +750,13 @@ async function removeMember(username) {
     if (res.ok) loadMembers();
 }
 
+// Обновленная функция активации/деактивации лимитов
 async function toggleBoardWip() {
     if (!activeBoardData) return;
-    activeBoardData.wip_enabled = document.getElementById('board-wip-toggle').checked ? 1 : 0;
+    const isEnabled = document.getElementById('board-wip-toggle').checked ? 1 : 0;
+    activeBoardData.wip_enabled = isEnabled;
+    const actionDesc = isEnabled ? 'Включил(а) WIP лимиты доски' : 'Отключил(а) WIP лимиты доски';
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: actionDesc}) });
     await syncWipToServer();
 }
 
@@ -860,8 +873,15 @@ function renderBoardCards() {
             }
         }
 
+        const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
         card.innerHTML = `
-            <div class="card-top"><span>${task.title}</span><span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span></div>
+            <div class="card-top">
+                <span>${task.title}</span>
+                <div style="display: flex; align-items: center;">
+                    ${progressHtml}
+                    <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                </div>
+            </div>
             <div class="card-meta-info">
                 <div>👤 ${task.assignee || '—'}</div>
                 ${dateHtml}
@@ -953,14 +973,25 @@ function setupDragAndDrop() {
     });
 }
 
+// Полная замена функции openModalForCreate (с учетом добавленных в следующем шаге переменных для чекпоинтов)
 function openModalForCreate(status) {
     if (!activeBoardId) return;
     editingTaskId = null;
     currentOpenedTask = null;
     targetColumnStatus = status;
     
+    let colName = status;
+    if (status === 'backlog_creation') {
+        colName = 'Бэклог';
+    } else if (activeBoardData && activeBoardData.columns) {
+        const col = activeBoardData.columns.find(c => c.id === status);
+        if (col) colName = col.name;
+    } else if (statusMap[status]) {
+        colName = statusMap[status];
+    }
+    
     const locEl = document.getElementById('modal-location');
-    if (locEl) locEl.innerText = status === 'backlog_creation' ? 'Бэклог' : (statusMap[status] || status);
+    if (locEl) locEl.innerText = colName;
 
     document.getElementById('modal-link-task-btn').style.display = 'none'; 
     document.getElementById('modal-title').value = '';
@@ -969,8 +1000,8 @@ function openModalForCreate(status) {
     document.getElementById('modal-description').value = '';
     document.getElementById('modal-logs').innerHTML = 'Новая задача';
     
-    document.getElementById('modal-comments-toggle-btn').style.display = 'none';
-    document.getElementById('modal-comments-section').style.display = 'none';
+    activeTaskCheckpoints = [];
+    renderCheckpoints();
     
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
@@ -983,8 +1014,12 @@ function openModalForCreate(status) {
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'none';
 
+    // Возвращаем штатный обработчик на случай использования в других сценариях
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
+
     document.getElementById('task-modal').style.display = 'block';
 }
+
 
 function openModalForEdit(id) {
     editingTaskId = id;
@@ -1001,6 +1036,9 @@ function openModalForEdit(id) {
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
+
+    // Возвращаем штатный обработчик
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     if (locEl) {
         if (col && col.archived) {
@@ -1036,9 +1074,17 @@ function openModalForEdit(id) {
     document.getElementById('modal-description').value = task.description || '';
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
     
-    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
     document.getElementById('modal-comments-section').style.display = 'none';
+    document.getElementById('comments-sidebar-tab').style.left = '-32px';
+
     loadTaskComments(id);
+    
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
     
     document.getElementById('task-modal').style.display = 'block';
 }
@@ -1050,13 +1096,16 @@ function closeModal() {
     document.getElementById('task-modal').style.display = 'none'; 
     
     const commentsSection = document.getElementById('modal-comments-section');
+    const tab = document.getElementById('comments-sidebar-tab');
     if (commentsSection) commentsSection.style.display = 'none';
+    if (tab) tab.style.left = '-32px';
     
     const input = document.getElementById('task-comment-input');
     if (input) input.value = '';
     
     editingTaskId = null;
     currentOpenedTask = null;
+    activeTaskCheckpoints = [];
 }
 
 
@@ -1074,7 +1123,8 @@ async function saveTask() {
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
         status: isBacklogCreation ? defaultCol : (editingTaskId ? currentOpenedTask.status : targetColumnStatus),
-        backlog: isBacklogCreation ? 1 : 0
+        backlog: isBacklogCreation ? 1 : 0,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
     
     if (editingTaskId) await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
@@ -1097,7 +1147,8 @@ async function archiveCurrentTask() {
         date: document.getElementById('modal-date').value,
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: currentOpenedTask.status
+        status: currentOpenedTask.status,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
 
     await fetch(`/api/tasks/${editingTaskId}`, { 
@@ -1275,12 +1326,18 @@ window.openArchiveViewer = async function () {
                     minute: '2-digit'
                 })
                 : '—';
-
+            
+            const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
+            
+            // Исправлена проблема с версткой: progressHtml вынесен из span
             card.innerHTML = `
                 <div class="card-top">
                     <span>${task.title}</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                        <div style="display: flex; align-items: center;">
+                            ${progressHtml}
+                            <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                        </div>
                         <button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button>
                     </div>
                 </div>
@@ -1413,60 +1470,75 @@ window.clearArchive = async function () {
 };
 
 // Открытие модального окна для архивной задачи
-window.openModalForArchived = function (task) {
+window.openModalForArchived = function(task) {
     currentOpenedTask = task;
     editingTaskId = task.id;
-
+    
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
     document.getElementById('modal-date').value = task.date || '';
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
-
     document.getElementById('modal-location').innerText = 'Архив';
 
-    document.getElementById('modal-logs').innerHTML =`
-        <strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
+    document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
 
-    // Принудительное отображение кнопки "В чат"
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
-
-    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
+    
+    // Сброс боковой панели комментариев в исходное состояние
     document.getElementById('modal-comments-section').style.display = 'none';
+    document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
     const commentsList = document.getElementById('task-comments-list');
-    if (commentsList) {
-        commentsList.innerHTML = '';
-    }
-
+    if (commentsList) commentsList.innerHTML = '';
     const commentInput = document.getElementById('task-comment-input');
-    if (commentInput) {
-        commentInput.value = '';
-    }
+    if (commentInput) commentInput.value = '';
 
     loadTaskComments(task.id);
 
-    const archiveBtn = document.querySelector('.btn-archive');
-    archiveBtn.textContent = 'Вернуть';
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
 
-    archiveBtn.onclick = async () => {
-        const res = await fetch(`/api/tasks/${task.id}/restore`, {
-            method: 'PUT'
-        });
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
 
-        if (!res.ok) {
+    archiveBtn.textContent = 'В архив';
+    archiveBtn.style.display = 'none';
+    
+    // Включаем кнопку "В бэклог" в архиве
+    backlogBtn.style.display = 'block'; 
+    restoreBtn.style.display = 'block';
+
+    // Подменяем обработчик восстановления, чтобы он сразу обращался к нужному API (минуя выбор колонки)
+    restoreBtn.onclick = async function(event) {
+        event.stopPropagation();
+        
+        // Гарантированно скрываем меню выбора колонок (на случай, если оно было закешировано)
+        const colSelect = document.getElementById('board-column-select');
+        if (colSelect) colSelect.style.display = 'none';
+        
+        if (!confirm('Вернуть задачу на доску?')) return;
+        
+        const res = await fetch(`/api/tasks/${editingTaskId}/restore`, { method: 'PUT' });
+        if (res.ok) {
+            closeModal();
+            await loadTasks();
+            if (document.getElementById('analytics-archive-view').style.display === 'block') {
+                await window.openArchiveViewer();
+            }
+        } else {
             alert('Ошибка восстановления задачи');
-            return;
         }
-
-        closeModal();
-
-        await loadTasks();
-        await openArchiveViewer();
     };
 
     document.getElementById('task-modal').style.display = 'block';
-};
+}
+
 
 // Универсальная функция открытия чата для текущей открытой задачи (активной или архивной)
 window.openTaskChat = function() {
@@ -1532,20 +1604,18 @@ async function openTaskFromChat(taskId) {
 }
 
 
+// 6. Логика панели комментариев
 function toggleTaskComments() {
-    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
-        ? document.getElementById('archived-task-modal') 
-        : document.getElementById('task-modal');
-        
-    const section = activeModal?.querySelector('#modal-comments-section') || document.getElementById('modal-comments-section');
+    const panel = document.getElementById('modal-comments-section');
+    const tab = document.getElementById('comments-sidebar-tab');
     
-    if (section) {
-        if (section.style.display === 'none') {
-            section.style.display = 'flex';
-            scrollToTaskCommentsBottom();
-        } else {
-            section.style.display = 'none';
-        }
+    if (panel.style.display === 'none') {
+        panel.style.display = 'flex';
+        tab.style.left = '-352px';
+        scrollToTaskCommentsBottom();
+    } else {
+        panel.style.display = 'none';
+        tab.style.left = '-32px';
     }
 }
 
@@ -1646,11 +1716,17 @@ window.openBacklogViewer = async function () {
             card.dataset.id = task.id;
 
             const dateStr = task.date ? new Date(task.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-
+            
+            const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
+            
+            // Исправлена проблема с версткой: progressHtml вынесен из span
             card.innerHTML = `
                 <div class="card-top">
                     <span>${task.title}</span>
-                    <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                    <div style="display: flex; align-items: center;">
+                        ${progressHtml}
+                        <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+                    </div>
                 </div>
                 <div class="card-meta-info">
                     <div>👤 ${task.assignee || '—'}</div>
@@ -1690,8 +1766,9 @@ window.openModalForBacklog = function (task) {
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
 
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
-    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
+
     document.getElementById('modal-comments-section').style.display = 'none';
+    document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
     const commentsList = document.getElementById('task-comments-list');
     if (commentsList) commentsList.innerHTML = '';
@@ -1699,6 +1776,13 @@ window.openModalForBacklog = function (task) {
     if (commentInput) commentInput.value = '';
 
     loadTaskComments(task.id);
+
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
 
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
@@ -1710,6 +1794,9 @@ window.openModalForBacklog = function (task) {
     archiveBtn.style.display = 'block';
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'block';
+
+    // Возвращаем штатный обработчик для бэклога с выбором колонки
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     document.getElementById('task-modal').style.display = 'block';
 };
@@ -1724,7 +1811,8 @@ async function sendCurrentTaskToBacklog() {
         date: document.getElementById('modal-date').value,
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: currentOpenedTask.status
+        status: currentOpenedTask.status,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
 
     await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
@@ -1732,7 +1820,13 @@ async function sendCurrentTaskToBacklog() {
     
     closeModal();
     await loadTasks();
+
+    // Обновляем вью архива, если мы отправляли задачу оттуда
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
+        await window.openArchiveViewer();
+    }
 }
+
 
 window.toggleBoardColumnSelect = function(event) {
     event.stopPropagation();
@@ -1766,5 +1860,165 @@ async function restoreTaskFromBacklog(taskId, columnId) {
     await loadTasks();
     if (document.getElementById('analytics-backlog-view').style.display === 'block') {
         await window.openBacklogViewer();
+    }
+}
+
+function initSearchListener() {
+    const searchInput = document.getElementById('global-search-input');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+            document.getElementById('search-results-dropdown').style.display = 'none';
+            return;
+        }
+        searchTimeout = setTimeout(() => performSearch(query), 400);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-container')) {
+            const drop = document.getElementById('search-results-dropdown');
+            if (drop) drop.style.display = 'none';
+        }
+    });
+}
+
+async function performSearch(query) {
+    if (!activeBoardId) return;
+    
+    const res = await fetch(`/api/boards/${activeBoardId}/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    const dropdown = document.getElementById('search-results-dropdown');
+    dropdown.innerHTML = '';
+    let hasResults = false;
+
+    const categories = [
+        { key: 'board', name: 'Доска', icon: '📝' },
+        { key: 'backlog', name: 'Бэклог', icon: '☰' },
+        { key: 'archive', name: 'Архив', icon: '📦' },
+        { key: 'chat', name: 'Чат', icon: '💬' },
+        { key: 'logs', name: 'Журнал действий', icon: '📋' }
+    ];
+
+    categories.forEach(cat => {
+        if (data[cat.key] && data[cat.key].length > 0) {
+            hasResults = true;
+            const catHeader = document.createElement('div');
+            catHeader.className = 'search-category-header';
+            catHeader.innerText = `${cat.icon} ${cat.name}`;
+            dropdown.appendChild(catHeader);
+
+            data[cat.key].forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'search-result-item';
+                
+                if (['board', 'backlog', 'archive'].includes(cat.key)) {
+                    row.innerText = item.title;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        openTaskFromChat(item.id);
+                    };
+                } else if (cat.key === 'chat') {
+                    row.innerHTML = `<strong>${item.username}:</strong> <span style="font-size: 11px;">${item.content}</span>`;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        const chat = document.getElementById('chat-sidebar');
+                        if (chat.style.display === 'none') toggleChat();
+                    };
+                } else if (cat.key === 'logs') {
+                    row.innerHTML = `<strong>${item.username}:</strong> <span style="font-size: 11px;">${item.content}</span>`;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        switchView('analytics');
+                        openLogsViewer();
+                    };
+                }
+                
+                dropdown.appendChild(row);
+            });
+        }
+    });
+
+    if (!hasResults) {
+        dropdown.innerHTML = '<div style="padding: 10px; text-align: center; color: #777; font-size: 12px;">Нет совпадений</div>';
+    }
+
+    dropdown.style.display = 'block';
+}
+
+async function renameColumn(colId) {
+    const input = document.getElementById(`rename-input-${colId}`);
+    if (!input) return;
+    const newName = input.value.trim() === '' ? 'Без названия' : input.value.trim();
+    const col = activeBoardData.columns.find(c => c.id === colId);
+    
+    if (col && col.name !== newName) {
+        const oldName = col.name;
+        col.name = newName;
+        await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Изменил(а) название колонки с '${oldName}' на '${newName}'`}) });
+    }
+    await syncBoardSettingsToServer();
+}
+
+// 2. Логика чекпоинтов
+function renderCheckpoints() {
+    const list = document.getElementById('checkpoints-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    activeTaskCheckpoints.forEach(cp => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
+        div.innerHTML = `
+            <input type="checkbox" ${cp.done ? 'checked' : ''} onchange="toggleCheckpoint(${cp.id})">
+            <span style="flex: 1; font-size: 13px; text-decoration: ${cp.done ? 'line-through' : 'none'}; color: ${cp.done ? '#777' : '#000'};">${cp.text}</span>
+            <button onclick="deleteCheckpoint(${cp.id})" style="background: none; border: none; color: #cc0000; cursor: pointer; font-size: 16px;">&times;</button>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function addCheckpoint() {
+    const input = document.getElementById('new-checkpoint-input');
+    const text = input.value.trim();
+    if (!text) return;
+    activeTaskCheckpoints.push({ id: Date.now(), text: text, done: false });
+    input.value = '';
+    renderCheckpoints();
+}
+
+function toggleCheckpoint(id) {
+    const cp = activeTaskCheckpoints.find(c => c.id === id);
+    if (cp) cp.done = !cp.done;
+    renderCheckpoints();
+}
+
+function deleteCheckpoint(id) {
+    activeTaskCheckpoints = activeTaskCheckpoints.filter(c => c.id !== id);
+    renderCheckpoints();
+}
+
+// Хелпер генерации HTML прогресс-бара для карточек
+function getCheckpointsProgressHtml(checkpointsStr) {
+    try {
+        const cps = checkpointsStr ? JSON.parse(checkpointsStr) : [];
+        if (cps.length === 0) return '';
+        const doneCount = cps.filter(c => c.done).length;
+        const pct = Math.round((doneCount / cps.length) * 100);
+        return `
+            <div style="display: flex; align-items: center; gap: 6px; margin-right: 12px;" title="Чекпоинты">
+                <div style="width: 40px; height: 6px; background: #ccc; border-radius: 3px; overflow: hidden;">
+                    <div style="width: ${pct}%; height: 100%; background: #0000ff;"></div>
+                </div>
+                <span style="font-size: 11px; color: #555; font-weight: bold;">${doneCount}/${cps.length}</span>
+            </div>
+        `;
+    } catch(e) {
+        return '';
     }
 }

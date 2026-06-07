@@ -31,6 +31,8 @@ def init_db():
     if not has_column("tasks", "previous_status"): db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
     if not has_column("tasks", "backlog"): db.execute("ALTER TABLE tasks ADD COLUMN backlog INTEGER DEFAULT 0")
     if not has_column("tasks", "sort_order"): db.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0")
+    if not has_column("tasks", "checkpoints"): db.execute("ALTER TABLE tasks ADD COLUMN checkpoints TEXT DEFAULT '[]'")
+
     
     if not has_column("boards", "columns_data"): 
         db.execute("ALTER TABLE boards ADD COLUMN columns_data TEXT")
@@ -52,6 +54,20 @@ def add_log(db, board_id: int, username: str, action: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute("INSERT INTO action_logs (board_id, username, action_desc, created_at) VALUES (?, ?, ?, ?)",
                (board_id, username, action, timestamp))
+
+# Вспомогательная функция для получения читаемого названия колонки вместо col_id
+def get_column_name(db, board_id: int, status_id: str) -> str:
+    if status_id == "backlog_creation" or status_id == "backlog": 
+        return "Бэклог"
+    board = db.execute("SELECT columns_data FROM boards WHERE id=?", (board_id,)).fetchone()
+    if board and board["columns_data"]:
+        try:
+            cols = json.loads(board["columns_data"])
+            for c in cols:
+                if c["id"] == status_id: 
+                    return c["name"]
+        except: pass
+    return status_id
 
 # --- WebSocket Менеджер ---
 class ConnectionManager:
@@ -100,6 +116,7 @@ class TaskData(BaseModel):
     description: str = ""
     status: str
     backlog: int = 0
+    checkpoints: str = "[]"
 
 class ReorderPayload(BaseModel):
     status: str
@@ -116,6 +133,9 @@ class TaskCommentData(BaseModel):
 
 class RestoreBacklogPayload(BaseModel):
     status: str
+
+class LogData(BaseModel):
+    action_desc: str
 
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
@@ -200,14 +220,11 @@ def add_member(board_id: int, data: AuthData, session: Optional[str] = Cookie(No
 def remove_member(board_id: int, username: str, session: Optional[str] = Cookie(None)):
     db = get_db()
     board = db.execute("SELECT * FROM boards WHERE id=?", (board_id,)).fetchone()
-    if not board:
-        raise HTTPException(status_code=404, detail="Доска не найдена")
-    
-    # Запрет удаления владельца из участников (Решение задачи 3)
-    if username == board["owner_username"]:
-        raise HTTPException(status_code=400, detail="Нельзя удалить владельца доски")
+    if not board: raise HTTPException(status_code=404, detail="Доска не найдена")
+    if username == board["owner_username"]: raise HTTPException(status_code=400, detail="Нельзя удалить владельца доски")
         
     db.execute("DELETE FROM board_members WHERE board_id=? AND username=?", (board_id, username))
+    add_log(db, board_id, session, f"Удалил(а) пользователя '{username}' с доски")
     db.commit()
     return {"status": "ok"}
 
@@ -244,13 +261,12 @@ def leave_board(board_id: int, payload: dict = None, session: Optional[str] = Co
 @app.put("/api/boards/{board_id}/title")
 def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[str] = Cookie(None)):
     db = get_db()
-    
-    board = db.execute("SELECT owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
-    if not board:
-        raise HTTPException(status_code=404)
+    board = db.execute("SELECT title, owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board: raise HTTPException(status_code=404)
         
+    old_title = board["title"]
     db.execute("UPDATE boards SET title=? WHERE id=?", (data.title, board_id))
-    add_log(db, board_id, session, f"Изменил(а) название доски на '{data.title}'")
+    add_log(db, board_id, session, f"Изменил(а) название доски с '{old_title}' на '{data.title}'")
     db.commit()
     return {"status": "ok", "new_title": data.title}
 
@@ -296,10 +312,13 @@ async def create_task(data: TaskData, session: Optional[str] = Cookie(None)):
     sort_order = max_order + 1
 
     cur = db.execute(
-        """INSERT INTO tasks (board_id, title, assignee, date, priority, description, status, backlog, creator, created_at, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (data.board_id, data.title, data.assignee, data.date, data.priority, data.description, data.status, data.backlog, session, datetime.now().strftime("%Y-%m-%d %H:%M"), sort_order)
+        """INSERT INTO tasks (board_id, title, assignee, date, priority, description, status, backlog, checkpoints, creator, created_at, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (data.board_id, data.title, data.assignee, data.date, data.priority, data.description, data.status, data.backlog, data.checkpoints, session, datetime.now().strftime("%Y-%m-%d %H:%M"), sort_order)
     )
-    add_log(db, data.board_id, session, f"Создал(а) задачу '{data.title}'")
+    
+    col_name = get_column_name(db, data.board_id, data.status)
+    location = "в Бэклог" if data.backlog == 1 else f"в колонку '{col_name}'"
+    add_log(db, data.board_id, session, f"Создал(а) задачу '{data.title}' {location}")
     db.commit()
     await manager.broadcast_update(data.board_id)
     return {"id": cur.lastrowid}
@@ -368,65 +387,24 @@ class TaskUpdatePayload(BaseModel):
 @app.put("/api/tasks/{task_id}")
 async def update_task(task_id: int, data: TaskData, session: Optional[str] = Cookie(None)):
     db = get_db()
+    old_task = db.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not old_task: raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    old_task = db.execute(
-        "SELECT status FROM tasks WHERE id=?",
-        (task_id,)
-    ).fetchone()
-
-    if not old_task:
-        raise HTTPException(status_code=404, detail="Задача не найдена")
-
-    # Обновление основных полей задачи
     db.execute(
-        """UPDATE tasks
-           SET title=?, assignee=?, date=?, priority=?, description=?, status=?
-           WHERE id=?""",
-        (
-            data.title,
-            data.assignee,
-            data.date,
-            data.priority,
-            data.description,
-            data.status,
-            task_id
-        )
+        """UPDATE tasks SET title=?, assignee=?, date=?, priority=?, description=?, status=?, checkpoints=? WHERE id=?""",
+        (data.title, data.assignee, data.date, data.priority, data.description, data.status, data.checkpoints, task_id)
     )
-
-    # Синхронизация измененного названия во всех привязанных сообщениях чата
-    db.execute(
-        """UPDATE messages 
-           SET linked_task_title = ? 
-           WHERE linked_task_id = ?""",
-        (data.title, task_id)
-    )
+    db.execute("UPDATE messages SET linked_task_title = ? WHERE linked_task_id = ?", (data.title, task_id))
 
     if old_task["status"] != data.status:
-        statuses = {
-            "todo": "В планах",
-            "in_progress": "В разработке",
-            "done": "Готово"
-        }
-
-        add_log(
-            db,
-            data.board_id,
-            session,
-            f"Переместил(а) задачу '{data.title}' из '{statuses.get(old_task['status'], old_task['status'])}' в '{statuses.get(data.status, data.status)}'"
-        )
+        old_col = get_column_name(db, data.board_id, old_task['status'])
+        new_col = get_column_name(db, data.board_id, data.status)
+        add_log(db, data.board_id, session, f"Переместил(а) задачу '{data.title}' из '{old_col}' в '{new_col}'")
     else:
-        add_log(
-            db,
-            data.board_id,
-            session,
-            f"Отредактировал(а) задачу '{data.title}'"
-        )
+        add_log(db, data.board_id, session, f"Отредактировал(а) задачу '{data.title}'")
 
     db.commit()
-    
-    # Рассылка обновления всем клиентам
     await manager.broadcast_update(data.board_id)
-
     return {"status": "ok"}
 
 @app.put("/api/boards/{board_id}/wip")
@@ -745,7 +723,10 @@ async def put_to_backlog(task_id: int, session: Optional[str] = Cookie(None)):
     db = get_db()
     task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     if not task: raise HTTPException(status_code=404)
-    db.execute("UPDATE tasks SET backlog=1 WHERE id=?", (task_id,))
+    
+    # Обнуляем флаг archived при переносе в бэклог, чтобы задача исчезала из архива
+    db.execute("UPDATE tasks SET backlog=1, archived=0 WHERE id=?", (task_id,))
+    
     add_log(db, task["board_id"], session, f"Отправил(а) задачу '{task['title']}' в бэклог")
     db.commit()
     await manager.broadcast_update(task["board_id"])
@@ -762,6 +743,38 @@ async def restore_from_backlog(task_id: int, data: RestoreBacklogPayload, sessio
     await manager.broadcast_update(task["board_id"])
     return {"status": "ok"}
 
+# Эндпоинт для явного логирования событий интерфейса
+@app.post("/api/boards/{board_id}/logs")
+def create_custom_log(board_id: int, data: LogData, session: Optional[str] = Cookie(None)):
+    if not session: raise HTTPException(status_code=401)
+    db = get_db()
+    add_log(db, board_id, session, data.action_desc)
+    db.commit()
+    return {"status": "ok"}
+
+# Эндпоинт глобального поиска
+@app.get("/api/boards/{board_id}/search")
+def search_board(board_id: int, q: str, session: Optional[str] = Cookie(None)):
+    if not session: raise HTTPException(status_code=401)
+    db = get_db()
+    query = f"%{q}%"
+    
+    tasks = db.execute("SELECT id, title, backlog, archived FROM tasks WHERE board_id=? AND (title LIKE ? OR description LIKE ?)", (board_id, query, query)).fetchall()
+    messages = db.execute("SELECT id, username, content FROM messages WHERE board_id=? AND content LIKE ? ORDER BY id DESC LIMIT 20", (board_id, query)).fetchall()
+    logs = db.execute("SELECT id, username, action_desc as content FROM action_logs WHERE board_id=? AND action_desc LIKE ? ORDER BY id DESC LIMIT 20", (board_id, query)).fetchall()
+    
+    results = {"board": [], "archive": [], "backlog": [], "chat": [], "logs": []}
+    
+    for t in tasks:
+        task_data = {"id": t["id"], "title": t["title"]}
+        if t["backlog"] == 1: results["backlog"].append(task_data)
+        elif t["archived"] == 1: results["archive"].append(task_data)
+        else: results["board"].append(task_data)
+        
+    for m in messages: results["chat"].append(dict(m))
+    for l in logs: results["logs"].append(dict(l))
+    
+    return results
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
