@@ -689,3 +689,30 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
 .task-modal-overlay, #task-modal-backdrop {
     z-index: 2499 !important;
 }
+
+.feedback-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 400px;
+    height: 44px;
+
+    border-radius: 10px;
+
+    background: #ffcc4d;
+
+    color: #222;
+
+    font-weight: 600;
+
+    text-decoration: none;
+
+    transition: .15s;
+
+    margin: 20px 0;
+}
+
+.feedback-btn:hover {
+    transform: translateY(-1px);
+}

@@ -22,6 +22,7 @@ def init_db():
     db.execute("""CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY)""")
     db.execute("""CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, content TEXT, linked_task_id INTEGER, linked_task_title TEXT)""")
     db.execute("""CREATE TABLE IF NOT EXISTS action_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, board_id INTEGER, username TEXT, action_desc TEXT, created_at TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS task_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, username TEXT, content TEXT, created_at TEXT)""")
 
     def has_column(table, column):
         return any(col["name"] == column for col in db.execute(f"PRAGMA table_info({table})"))
@@ -29,7 +30,6 @@ def init_db():
     if not has_column("tasks", "archived"): db.execute("ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0")
     if not has_column("tasks", "previous_status"): db.execute("ALTER TABLE tasks ADD COLUMN previous_status TEXT DEFAULT ''")
     
-    # Инициализация динамической структуры колонок для досок
     if not has_column("boards", "columns_data"): 
         db.execute("ALTER TABLE boards ADD COLUMN columns_data TEXT")
         default_cols = json.dumps([
@@ -41,6 +41,7 @@ def init_db():
 
     db.commit()
     db.close()
+
 init_db()
 
 # --- Вспомогательная функция логирования ---
@@ -105,6 +106,9 @@ class BoardTitleUpdate(BaseModel):
 
 class BoardWipPayload(BaseModel):
     wip_enabled: int
+
+class TaskCommentData(BaseModel):
+    content: str
 
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
@@ -737,6 +741,44 @@ async def reorder_tasks(
 
     await manager.broadcast_update(board_id)
 
+    return {"status": "ok"}
+
+@app.get("/api/tasks/{task_id}/comments")
+def get_task_comments(task_id: int, session: Optional[str] = Cookie(None)):
+    db = get_db()
+    
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+        
+    access = db.execute("SELECT 1 FROM board_members WHERE board_id=? AND username=?", (task['board_id'], session)).fetchone()
+    if not access:
+        raise HTTPException(status_code=403, detail="Доступ запрещен")
+        
+    comments = db.execute("SELECT * FROM task_comments WHERE task_id=? ORDER BY id ASC", (task_id,)).fetchall()
+    return [dict(row) for row in comments]
+
+@app.post("/api/tasks/{task_id}/comments")
+def add_task_comment(task_id: int, data: TaskCommentData, session: Optional[str] = Cookie(None)):
+    if not session:
+        raise HTTPException(status_code=401)
+        
+    db = get_db()
+    task = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+        
+    access = db.execute("SELECT 1 FROM board_members WHERE board_id=? AND username=?", (task['board_id'], session)).fetchone()
+    if not access:
+        raise HTTPException(status_code=403, detail="Доступ запрещен")
+        
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT INTO task_comments (task_id, username, content, created_at) VALUES (?, ?, ?, ?)",
+               (task_id, session, data.content, timestamp))
+    
+    add_log(db, task['board_id'], session, f"Оставил(а) комментарий к задаче '{task['title']}'")
+    db.commit()
+    
     return {"status": "ok"}
 
 

@@ -201,7 +201,7 @@
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
-                    <div style="margin-top: 20px; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
+                    <div style="margin: 20px 0; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
                         <div class="wip-toggle-box" style="font-size: 16px;">
                             <label style="display: flex; align-items: center; cursor: pointer;">
                                 <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()" style="margin-right: 10px; width: 18px; height: 18px;"> 
@@ -209,6 +209,11 @@
                             </label>
                         </div>
                         <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация лимитов колонок для текущей доски.</p>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2>Обратная связь</h2>
+                        <a href="https://forms.yandex.ru/..." target="_blank" class="feedback-btn" >Оставить отзыв</a>
                     </div>
                 </main>
 
@@ -222,7 +227,7 @@
             <button class="modal-link-btn" id="modal-link-task-btn" onclick="linkTaskToChat()" title="Обсудить в чате" style="display: none;">↪️ В чат</button>
             <button class="modal-close" onclick="closeModal()">&times;</button>
             
-            <div class="modal-body">
+                        <div class="modal-body">
                 <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
                 
                 <div class="meta-grid">
@@ -250,6 +255,17 @@
                 </div>
                 
                 <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
+                
+                <button id="modal-comments-toggle-btn" class="chat-toggle-btn" style="width: 100%; margin-bottom: 12px; display: none;" onclick="toggleTaskComments()">💬 Комментарии</button>
+                
+                <div id="modal-comments-section" style="display: none; flex-direction: column; height: 300px; border: 2px solid #0000ff; border-radius: 4px; margin-bottom: 15px; background: #e6e6e6;">
+                    <div class="chat-messages" id="task-comments-list" style="flex: 1; padding: 10px; overflow-y: auto;"></div>
+                    <div class="chat-input-area" style="padding: 10px; border-top: 2px solid #0000ff;">
+                        <textarea id="task-comment-input" placeholder="Написать комментарий..." style="height: 50px;" onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendTaskComment(); }"></textarea>
+                        <button onclick="sendTaskComment()">Отправить</button>
+                    </div>
+                </div>
+
                 <div class="mock-logs" id="modal-logs"></div>
                 
                 <div class="modal-save-panel">
@@ -257,6 +273,7 @@
                     <button class="btn-save" onclick="saveTask()">Сохранить</button>
                 </div>
             </div>
+
         </div>
     </div>
     
@@ -273,7 +290,7 @@
             </div>
         </div>
     </div>
-
+    
     <script src="/app.js"></script>
 </body>
 </html>

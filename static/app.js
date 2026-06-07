@@ -955,13 +955,17 @@ function openModalForCreate(status) {
     const locEl = document.getElementById('modal-location');
     if (locEl) locEl.innerText = statusMap[status] || status;
 
-    document.getElementById('modal-link-task-btn').style.display = 'none'; // Скрываем кнопку в новой задаче
+    document.getElementById('modal-link-task-btn').style.display = 'none'; 
 
     document.getElementById('modal-title').value = '';
     document.getElementById('modal-assignee').value = activeUser.username;
     document.getElementById('modal-date').value = '';
     document.getElementById('modal-description').value = '';
     document.getElementById('modal-logs').innerHTML = 'Новая задача';
+    
+    document.getElementById('modal-comments-toggle-btn').style.display = 'none';
+    document.getElementById('modal-comments-section').style.display = 'none';
+    
     document.getElementById('task-modal').style.display = 'block';
 
     const archiveBtn = document.querySelector('.btn-archive');
@@ -970,6 +974,7 @@ function openModalForCreate(status) {
 
     archiveBtn.onclick = archiveCurrentTask;
 }
+
 
 function openModalForEdit(id) {
     editingTaskId = id;
@@ -980,7 +985,6 @@ function openModalForEdit(id) {
     }
     currentOpenedTask = task;
 
-    // Поиск колонки, к которой привязана задача
     const col = activeBoardData.columns.find(c => c.id === task.status);
 
     const locEl = document.getElementById('modal-location');
@@ -988,7 +992,6 @@ function openModalForEdit(id) {
 
     if (locEl) {
         if (col && col.archived) {
-            // Если колонка в архиве
             locEl.innerText = `${col.name} (архив)`;
             archiveBtn.textContent = 'Извлечь на доску';
             archiveBtn.onclick = async () => {
@@ -998,7 +1001,6 @@ function openModalForEdit(id) {
                     return;
                 }
                 
-                // Перенос задачи в первую активную колонку
                 task.status = firstCol.id;
                 await fetch(`/api/tasks/${task.id}`, { 
                     method: 'PUT', 
@@ -1009,13 +1011,11 @@ function openModalForEdit(id) {
                 closeModal();
                 await loadTasks();
                 
-                // Обновление окна архивированной колонки, если оно открыто
                 if (currentArchivedColId) {
                     openArchivedColumnModal(currentArchivedColId);
                 }
             };
         } else {
-            // Обычное поведение для активных колонок
             locEl.innerText = col ? col.name : task.status;
             archiveBtn.textContent = 'В архив';
             archiveBtn.onclick = archiveCurrentTask;
@@ -1031,11 +1031,30 @@ function openModalForEdit(id) {
     document.getElementById('modal-description').value = task.description || '';
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
     
+    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
+    document.getElementById('modal-comments-section').style.display = 'none';
+    loadTaskComments(id);
+    
     document.getElementById('task-modal').style.display = 'block';
 }
 
 
-function closeModal() { document.getElementById('task-modal').style.display = 'none'; }
+
+
+function closeModal() { 
+    document.getElementById('task-modal').style.display = 'none'; 
+    
+    const commentsSection = document.getElementById('modal-comments-section');
+    if (commentsSection) commentsSection.style.display = 'none';
+    
+    const input = document.getElementById('task-comment-input');
+    if (input) input.value = '';
+    
+    editingTaskId = null;
+    currentOpenedTask = null;
+}
+
+
 
 async function saveTask() {
     const payload = {
@@ -1406,6 +1425,21 @@ window.openModalForArchived = function (task) {
     // Принудительное отображение кнопки "В чат"
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
 
+    document.getElementById('modal-comments-toggle-btn').style.display = 'block';
+    document.getElementById('modal-comments-section').style.display = 'none';
+
+    const commentsList = document.getElementById('task-comments-list');
+    if (commentsList) {
+        commentsList.innerHTML = '';
+    }
+
+    const commentInput = document.getElementById('task-comment-input');
+    if (commentInput) {
+        commentInput.value = '';
+    }
+
+    loadTaskComments(task.id);
+
     const archiveBtn = document.querySelector('.btn-archive');
     archiveBtn.textContent = 'Вернуть';
 
@@ -1495,4 +1529,101 @@ async function openTaskFromChat(taskId) {
         console.log('Сетевая ошибка при получении задачи:', err);
     }
 }
+
+function toggleTaskComments() {
+    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
+        ? document.getElementById('archived-task-modal') 
+        : document.getElementById('task-modal');
+        
+    const section = activeModal?.querySelector('#modal-comments-section') || document.getElementById('modal-comments-section');
+    
+    if (section) {
+        if (section.style.display === 'none') {
+            section.style.display = 'flex';
+            scrollToTaskCommentsBottom();
+        } else {
+            section.style.display = 'none';
+        }
+    }
+}
+
+
+async function loadTaskComments(taskId) {
+    const res = await fetch(`/api/tasks/${taskId}/comments`);
+    if (res.ok) {
+        const comments = await res.json();
+        renderTaskComments(comments);
+    }
+}
+
+function renderTaskComments(comments) {
+    const container = document.getElementById('task-comments-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (comments.length === 0) {
+        container.innerHTML =
+            '<div style="text-align:center;color:#777;font-size:13px;margin-top:10px;">Нет комментариев</div>';
+        return;
+    }
+
+    comments.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+
+        div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span class="chat-msg-author">${c.username}</span>
+                <span style="font-size:10px;color:#888;">${c.created_at}</span>
+            </div>
+            <div class="chat-msg-text">${c.content}</div>
+        `;
+
+        container.appendChild(div);
+    });
+
+    container.scrollTop = container.scrollHeight;
+}
+
+
+async function sendTaskComment() {
+    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
+        ? document.getElementById('archived-task-modal') 
+        : document.getElementById('task-modal');
+        
+    const input = activeModal?.querySelector('#task-comment-input') || document.getElementById('task-comment-input');
+    if (!input) return;
+    
+    const content = input.value.trim();
+    if (!content || !editingTaskId) return;
+    
+    const res = await fetch(`/api/tasks/${editingTaskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content })
+    });
+    
+    if (res.ok) {
+        input.value = '';
+        await loadTaskComments(editingTaskId);
+        await loadLogs();
+    }
+}
+
+
+function scrollToTaskCommentsBottom(passedContainer = null) {
+    let container = passedContainer;
+    if (!container) {
+        const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
+            ? document.getElementById('archived-task-modal') 
+            : document.getElementById('task-modal');
+        container = activeModal?.querySelector('#task-comments-list') || document.getElementById('task-comments-list');
+    }
+    
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
 
