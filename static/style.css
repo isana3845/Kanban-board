@@ -21,10 +21,13 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
 .wide-dropdown { width: 260px; }
 .wip-menu { right: auto; left: 0; top: 30px; width: 160px; padding: 8px; background-color: #cccccc; }
 .wip-title { font-size: 11px; font-weight: bold; margin-bottom: 4px; color: #222; }
-#menu-wip-done {
+
+/* Динамическое смещение меню влево для любой последней колонки в списке */
+.column:last-child .wip-menu {
     left: auto !important;
     right: 0 !important;
 }
+
 
 /* Формы внутри выпадающих панелей */
 .dropdown-menu input[type="text"], 
@@ -677,3 +680,12 @@ body, html { height: 100%; background-color: #bfbfbf; overflow: hidden; }
     letter-spacing: -2px;
 }
 
+/* Модальное окно детальной информации о задаче должно иметь наивысший приоритет */
+#task-modal, .task-modal {
+    z-index: 2500 !important; /* Значение должно быть гарантированно выше, чем z-index окна архива */
+}
+
+/* Фоновая подложка (оверлей) модального окна задачи */
+.task-modal-overlay, #task-modal-backdrop {
+    z-index: 2499 !important;
+}

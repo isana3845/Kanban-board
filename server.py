@@ -103,6 +103,9 @@ class ReorderPayload(BaseModel):
 class BoardTitleUpdate(BaseModel):
     title: str
 
+class BoardWipPayload(BaseModel):
+    wip_enabled: int
+
 # --- Эндпоинты ---
 @app.post("/api/auth/login")
 def login(data: AuthData, response: Response):
@@ -469,6 +472,25 @@ async def update_task(task_id: int, data: TaskData, session: Optional[str] = Coo
 
     return {"status": "ok"}
 
+@app.put("/api/boards/{board_id}/wip")
+async def update_board_wip(board_id: int, payload: BoardWipPayload, session: Optional[str] = Cookie(None)):
+    if not session: 
+        raise HTTPException(status_code=401)
+
+    db = get_db()
+    # Проверка существования доски и прав доступа (изменение доступно только владельцу)
+    board = db.execute("SELECT owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board:
+        raise HTTPException(status_code=404, detail="Доска не найдена")
+    if board["owner_username"] != session:
+        raise HTTPException(status_code=403, detail="Доступ запрещен")
+
+    db.execute("UPDATE boards SET wip_enabled=? WHERE id=?", (payload.wip_enabled, board_id))
+    db.commit()
+
+    # Отправка уведомления об обновлении всем подключенным клиентам
+    await manager.broadcast_update(board_id)
+    return {"status": "ok"}
 
 
 @app.get("/api/boards/{board_id}/messages")

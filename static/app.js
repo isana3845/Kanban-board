@@ -141,6 +141,17 @@ function initListeners() {
 }
 
 function renderColumns() {
+    // 1. Запоминаем ID колонки, чьё меню сейчас открыто (исправлен поиск по префиксу menu-wip-)
+    let openMenuColumnId = null;
+    if (activeBoardData && activeBoardData.columns) {
+        activeBoardData.columns.forEach(col => {
+            const menu = document.getElementById(`menu-wip-${col.id}`);
+            if (menu && (menu.style.display === 'block' || menu.classList.contains('show'))) {
+                openMenuColumnId = col.id;
+            }
+        });
+    }
+
     const container = document.querySelector('.board-columns');
     container.innerHTML = '';
     if (!activeBoardData || !activeBoardData.columns) return;
@@ -171,8 +182,8 @@ function renderColumns() {
                         <div class="wip-title">WIP Лимит (0 - нет):</div>
                         <div class="wip-controls wip-limit-group">
                             <input type="number" id="wip-input-${col.id}" value="${col.wip_limit}" min="0" onchange="syncBoardSettingsToServer()" onclick="this.select()">
-                            <button class="btn-wip-math" onclick="changeWip('${col.id}', 1)">+</button>
-                            <button class="btn-wip-math" onclick="changeWip('${col.id}', -1)">-</button>
+                            <button class="btn-wip-math" onclick="event.stopPropagation(); changeWip('${col.id}', 1)">+</button>
+                            <button class="btn-wip-math" onclick="event.stopPropagation(); changeWip('${col.id}', -1)">-</button>
                         </div>
                         <hr style="margin: 8px 0;">
                         <button onclick="archiveColumn('${col.id}')" style="width:100%; background:#cc0000; color:white; border:none; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold;">В архив колонку</button>
@@ -186,7 +197,16 @@ function renderColumns() {
 
     setupDragAndDrop();
     renderBoardCards(); 
+
+    // 2. После генерации DOM-структуры восстанавливаем открытое меню по правильному ID
+    if (openMenuColumnId) {
+        const menu = document.getElementById(`menu-wip-${openMenuColumnId}`);
+        if (menu) {
+            menu.style.display = 'block';
+        }
+    }
 }
+
 
 async function createNewColumn() {
     if (!activeBoardId) return;
