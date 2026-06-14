@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response, Cookie, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -117,7 +117,7 @@ class TaskData(BaseModel):
     date: str = ""
     start_date: str = ""
     priority: str = "Средняя"
-    description: str = ""
+    description: str = Field("", max_length=3000)
     status: str
     backlog: int = 0
     checkpoints: str = "[]"
@@ -177,13 +177,19 @@ def get_boards(session: Optional[str] = Cookie(None)):
 def create_board(data: BoardData, session: Optional[str] = Cookie(None)):
     if not session: raise HTTPException(status_code=401)
     db = get_db()
-    cur = db.execute("INSERT INTO boards (title, owner_username, wip_enabled, wip_todo, wip_in_progress, wip_done) VALUES (?, ?, 0, 0, 0, 0)", 
-                     (data.title, session))
+    default_cols = json.dumps([
+        {"id": "todo", "name": "В планах", "wip_limit": 0, "archived": False},
+        {"id": "in_progress", "name": "В разработке", "wip_limit": 0, "archived": False},
+        {"id": "done", "name": "Готово", "wip_limit": 0, "archived": False}
+    ])
+    cur = db.execute("INSERT INTO boards (title, owner_username, wip_enabled, wip_todo, wip_in_progress, wip_done, columns_data) VALUES (?, ?, 0, 0, 0, 0, ?)", 
+                     (data.title, session, default_cols))
     board_id = cur.lastrowid
     db.execute("INSERT INTO board_members (board_id, username) VALUES (?, ?)", (board_id, session))
     add_log(db, board_id, session, f"Создал(а) доску '{data.title}'")
     db.commit()
     return {"id": board_id, "title": data.title}
+
 
 @app.put("/api/boards/{board_id}/settings")
 async def update_board_settings(board_id: int, data: BoardSettingsUpdate, session: Optional[str] = Cookie(None)):
@@ -755,5 +761,4 @@ def search_board(board_id: int, q: str, session: Optional[str] = Cookie(None)):
     return results
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
 

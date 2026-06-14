@@ -42,18 +42,18 @@
         <div class="main-layout">
             
             <header class="header">
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="header-title">
                     <h1 class="board-title" id="main-board-title">Выберите доску...</h1>
-                    <button id="edit-board-title-btn" onclick="renameCurrentBoard()" style="display: none; background: none; border: none; cursor: pointer; font-size: 16px;" title="Переименовать доску">✏️</button>
+                    <button id="edit-board-title-btn" onclick="renameCurrentBoard()" class="edit-board-btn" title="Переименовать доску">✏️</button>
                 </div>
                 <div class="header-actions">
                     
-                    <div class="search-container" style="position: relative; overflow: visible;">
+                    <div class="search-container">
                         <div class="search-input-box">
-                            <input type="text" id="global-search-input" class="search-input" placeholder="Поиск (задачи, логи, чат)..." style="width: 260px;">
+                            <input type="text" id="global-search-input" class="search-input" placeholder="Поиск (задачи, логи, чат)...">
                             <button class="search-btn">🔍</button>
                         </div>
-                        <div id="search-results-dropdown" class="dropdown-menu" style="display: none; top: 38px; left: 0; right: auto; width: 100%; max-height: 400px; overflow-y: auto; padding: 0;"></div>
+                        <div id="search-results-dropdown" class="dropdown-menu search-dropdown"></div>
                     </div>
 
 
@@ -78,11 +78,11 @@
                                     <div class="members-section-title">Участники доски:</div>
                                     <ul class="members-list" id="connected-members-list"></ul>
                                     <hr>
-                                    <button onclick="leaveCurrentBoard()" class="dropdown-btn text-red" style="width: 100%; text-align: left;">Покинуть доску</button>
-                                    <button id="delete-board-btn" onclick="deleteCurrentBoard()" class="dropdown-btn text-red" style="display:none;margin-top:8px;">Удалить доску</button>
+                                    <button onclick="leaveCurrentBoard()" class="dropdown-btn text-red">Покинуть доску</button>
+                                    <button id="delete-board-btn" onclick="deleteCurrentBoard()" class="dropdown-btn text-red delete-board-btn">Удалить доску</button>
                                     <hr>
                                 </div>
-                                <div id="user-no-board-msg" style="padding: 15px; text-align: center; color: #777; font-size: 13px;">
+                                <div id="user-no-board-msg" class="user-no-board-msg">
                                     Выберите доску
                                 </div>
                                 <button onclick="logoutUser()" class="dropdown-btn text-red">Выйти из аккаунта</button>
@@ -97,62 +97,62 @@
                 
                 <main class="board-content" id="view-kanban" style="display: none;">
                     
-                    <div class="toolbar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px;">
-                        <div class="control-wrapper" style="display: flex; gap: 10px;">
+                    <div class="toolbar">
+                        <div class="toolbar-buttons">
                             <button class="chat-toggle-btn" onclick="toggleColumnMenu('filter-sort-dropdown', event)">Управление задачами 🔽</button>
-                            <button class="chat-toggle-btn" onclick="createNewColumn()" style="background-color: #8c8c8c;">+ Новая колонка</button>
-                            <button class="chat-toggle-btn" onclick="openModalForCreate()" style="background-color: #0000ff;">+ Новая задача</button>
+                            <button class="chat-toggle-btn" onclick="createNewColumn()">+ Новая колонка</button>
+                            <button class="chat-toggle-btn" onclick="openModalForCreate()">+ Новая задача</button>
                             
-                            <div class="dropdown-menu" id="filter-sort-dropdown" style="width: 280px; left: 0; right: auto; padding: 15px;" onclick="event.stopPropagation()">
-                                <div style="display: flex; flex-direction: column;">
+                            <div class="dropdown-menu filter-sort-dropdown" id="filter-sort-dropdown" onclick="event.stopPropagation()">
+                                <div class="filter-sort-content">
                                     <div class="wip-title">Сортировка:</div>
-                                    <select class="sort-select" style="width:100%; margin-bottom: 15px;" onchange="applySort(this.value)">
+                                    <select class="sort-select" onchange="applySort(this.value)">
                                         <option value="none">По умолчанию</option>
                                         <option value="user">По пользователю</option>
                                         <option value="date">По дедлайну</option>
                                         <option value="priority">По важности</option>
                                     </select>
                                     
-                                    <hr style="margin-bottom: 10px;">
+                                    <hr>
                                     
                                     <div class="wip-title">Исполнитель:</div>
-                                    <div id="filter-assignees" style="max-height: 90px; overflow-y:auto; margin-bottom:10px; font-size:13px;"></div>
+                                    <div id="filter-assignees" class="filter-assignees-list"></div>
                                     
                                     <div class="wip-title">Важность:</div>
-                                    <div style="font-size:13px; margin-bottom:10px;">
-                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Высокая"> Высокая</label>
-                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Средняя"> Средняя</label>
-                                        <label style="display:block; cursor:pointer;"><input type="checkbox" class="filter-priority" value="Низкая"> Низкая</label>
+                                    <div class="filter-priorities">
+                                        <label><input type="checkbox" class="filter-priority" value="Высокая"> Высокая</label>
+                                        <label><input type="checkbox" class="filter-priority" value="Средняя"> Средняя</label>
+                                        <label><input type="checkbox" class="filter-priority" value="Низкая"> Низкая</label>
                                     </div>
 
                                     <div class="wip-title">Дедлайн:</div>
-                                    <select id="filter-deadline" style="width:100%; font-size:13px; margin-bottom:15px; padding: 5px;">
+                                    <select id="filter-deadline" class="filter-deadline">
                                         <option value="all">Любое время</option>
                                         <option value="3">Ближайшие 3 дня</option>
                                         <option value="7">Ближайшая неделя</option>
                                         <option value="14">Ближайшие 2 недели</option>
                                     </select>
                                     
-                                    <div style="display: flex; gap: 8px;">
-                                        <button onclick="clearFilters()" style="flex: 1; padding: 6px; background: #cc0000; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Сбросить</button>
-                                        <button onclick="applyFilters()" style="flex: 1; padding: 6px; background: #0000ff; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 2px;">Применить</button>
+                                    <div class="filter-actions">
+                                        <button onclick="clearFilters()" class="filter-clear-btn">Сбросить</button>
+                                        <button onclick="applyFilters()" class="filter-apply-btn">Применить</button>
                                     </div>
                                 </div>
                             </div>
 
                         </div>
-                        <button class="chat-toggle-btn" onclick="toggleChat()">💬 Чат доски</button>
+                        <button class="chat-toggle-btn" onclick="toggleChat()">Чат доски</button>
                     </div>
 
-                    <div class="board-columns-wrapper" style="position: relative; flex-grow: 1; display: flex; margin-top: 10px;">
+                    <div class="board-columns-wrapper">
                         <div id="dropzone-backlog" class="side-dropzone side-dropzone-left" data-target="backlog">
                             <div class="dropzone-icon">☰</div>
                         </div>
                         
-                        <div class="board-columns" style="margin-top: 0;"></div>
+                        <div class="board-columns"></div>
                         
                         <div id="dropzone-archive" class="side-dropzone side-dropzone-right" data-target="archive">
-                            <div class="dropzone-icon">📦</div>
+                            <div class="dropzone-icon">☰</div>
                         </div>
                     </div>
 
@@ -180,8 +180,8 @@
                     <div class="folders-grid" id="folders-grid-container"></div>
                 </main>
 
-                <main class="folders-content" id="view-analytics" style="display:none;">
-                    <div class="folders-grid">
+                <main class="folders-content analytics-content" id="view-analytics" style="display:none;">
+                    <div class="folders-grid analytics-grid">
                         <div class="log-folder-card" onclick="openLogsViewer()">
                             <div class="log-folder-icon"></div>
                             <div class="log-folder-title">Журнал действий</div>
@@ -201,21 +201,25 @@
                         </div>
                     </div>
 
-                    <div id="analytics-logs-view" style="display:none;margin-top:25px;">
+                    <div id="analytics-logs-view" class="analytics-subview" style="display:none;">
                         <button class="btn-create-board" onclick="closeLogsViewer()">← Назад</button>
-                        <div class="logs-container" id="analytics-logs-list" style="margin-top:20px;"></div>
+                        <div class="logs-container" id="analytics-logs-list"></div>
                     </div>
 
-                    <div id="analytics-archive-view" style="display:none;margin-top:25px;">
-                        <button class="btn-create-board" onclick="closeArchiveViewer()">← Назад</button>
-                        <button class="btn-create-board" onclick="clearArchive()" style="margin-left:10px;">Очистить архив</button>
-                        <div id="archive-tasks-list" style="margin-top:20px;"></div>
+                    <div id="analytics-archive-view" class="analytics-subview" style="display:none;">
+                        <div class="analytics-subview-header">
+                            <button class="btn-create-board" onclick="closeArchiveViewer()">← Назад</button>
+                            <button class="btn-create-board" onclick="clearArchive()">Очистить архив</button>
+                        </div>
+                        <div id="archive-tasks-list" class="archive-tasks-list"></div>
                     </div>
 
-                    <div id="analytics-backlog-view" style="display:none;margin-top:25px;">
-                        <button class="btn-create-board" onclick="closeBacklogViewer()">← Назад</button>
-                        <button class="btn-create-board" onclick="openModalForCreate('backlog_creation')" style="margin-left:10px; background-color: #0000ff;">+ Новая задача</button>
-                        <div id="backlog-tasks-list" style="margin-top:20px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;"></div>
+                    <div id="analytics-backlog-view" class="analytics-subview" style="display:none;">
+                        <div class="analytics-subview-header">
+                            <button class="btn-create-board" onclick="closeBacklogViewer()">← Назад</button>
+                            <button class="btn-create-board backlog-create-btn" onclick="openModalForCreate('backlog_creation')">+ Новая задача</button>
+                        </div>
+                        <div id="backlog-tasks-list" class="backlog-tasks-list"></div>
                     </div>
                 </main>
 
@@ -223,29 +227,39 @@
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
                     
-                    <div style="margin: 20px 0; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
-                        <div class="wip-toggle-box" style="font-size: 16px;">
-                            <label style="display: flex; align-items: center; cursor: pointer;">
-                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()" style="margin-right: 10px; width: 18px; height: 18px;"> 
+                    <div class="settings-card">
+                        <div class="wip-toggle-box">
+                            <label>
+                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
                                 Включить WIP лимиты
                             </label>
                         </div>
-                        <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация лимитов колонок для текущей доски.</p>
+                        <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
                     </div>
                         
-                    <div style="margin: 20px 0; background: #fff; padding: 20px; border: 1px solid #ccc; border-radius: 6px; max-width: 400px;">
-                        <div class="wip-toggle-box" style="font-size: 16px;">
-                            <label style="display: flex; align-items: center; cursor: pointer;">
-                                <input type="checkbox" id="board-dropzones-toggle" onchange="toggleBoardDropzones()" style="margin-right: 10px; width: 18px; height: 18px;"> 
+                    <div class="settings-card">
+                        <div class="wip-toggle-box">
+                            <label>
+                                <input type="checkbox" id="board-dropzones-toggle" onchange="toggleBoardDropzones()"> 
                                 Включить боковые зоны (Бэклог/Архив)
                             </label>
                         </div>
-                        <p style="margin-top: 10px; font-size: 13px; color: #666;">Активация зон быстрого переноса для текущей доски.</p>
+                        <p class="settings-hint">Активация зон быстрого переноса для текущей доски.</p>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <div class="wip-toggle-box">
+                            <label>
+                                <input type="checkbox" id="board-scroll-toggle" onchange="window.toggleScrollMode()"> 
+                                Включить общий скролл доски.
+                            </label>
+                        </div>
+                        <p class="settings-hint">Активация единого скрола для текущей доски.</p>
                     </div>
 
                     <div class="settings-section">
                         <h2>Обратная связь</h2>
-                        <a href="https://forms.yandex.ru/u/6a24fddbf47e7336edd5943d" target="_blank" class="feedback-btn" >Оставить отзыв</a>
+                        <a href="https://forms.yandex.ru/u/6a24fddbf47e7336edd5943d" target="_blank" class="feedback-btn">Оставить отзыв</a>
                     </div>
                 
                 </main>
@@ -254,7 +268,7 @@
     </div>
 
     <div class="modal-backdrop" id="task-modal">
-        <div class="modal-card" style="position: relative;">
+        <div class="modal-card">
 
             <div id="comments-sidebar-tab" class="comments-vertical-tab" title="Комментарии" onclick="toggleTaskComments()">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -263,10 +277,10 @@
             </div>
             
             <div id="modal-comments-section" class="comments-side-panel" style="display: none;">
-                <div class="wip-title" style="padding: 21px 12px; border-bottom: 1px solid #aaa; font-size: 13px;">Комментарии задачи</div>
-                <div class="chat-messages" id="task-comments-list" style="flex: 1; padding: 10px; overflow-y: auto;"></div>
-                <div class="chat-input-area" style="padding: 10px; border-top: 2px solid #0000ff;">
-                    <textarea id="task-comment-input" placeholder="Написать сообщение..." style="height: 50px;" onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendTaskComment(); }"></textarea>
+                <div class="comments-header">Комментарии задачи</div>
+                <div class="chat-messages comments-list" id="task-comments-list"></div>
+                <div class="chat-input-area comments-input">
+                    <textarea id="task-comment-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendTaskComment(); }"></textarea>
                     <button onclick="sendTaskComment()">Отправить</button>
                 </div>
             </div>
@@ -277,7 +291,7 @@
             <div class="modal-body">
                 <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
                 
-                                <div class="meta-grid">
+                <div class="meta-grid">
                     <div class="meta-label">Расположение</div>
                     <div class="meta-value flex-align" id="modal-status-container">
                         <select id="modal-status-select"></select>
@@ -291,16 +305,14 @@
                     
                     <div class="meta-label">Дата начала</div>
                     <div class="meta-value flex-align">
-                        <span class="meta-icon">▶️</span>
-                        <input type="date" id="modal-start-date" style="flex: 1;">
-                        <input type="time" id="modal-start-time" value="00:00" style="width: 85px;">
+                        <input type="date" id="modal-start-date">
+                        <input type="time" id="modal-start-time" value="00:00">
                     </div>
 
                     <div class="meta-label">Дедлайн</div>
                     <div class="meta-value flex-align">
-                        <span class="meta-icon">🗓️</span>
-                        <input type="date" id="modal-date" style="flex: 1;">
-                        <input type="time" id="modal-time" value="00:00" style="width: 85px;">
+                        <input type="date" id="modal-date">
+                        <input type="time" id="modal-time" value="00:00">
                     </div>
                     
                     <div class="meta-label">Важность</div>
@@ -314,24 +326,27 @@
                 </div>
 
                 
-                <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
-                
-                <div class="checkpoints-section" style="margin-bottom: 15px;">
-                    <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px;">Чеклист</div>
+                <textarea id="modal-description" class="description-field" maxlength="3000" placeholder="Добавить описание"></textarea>
+                <div id="char-counter-container" style="text-align: right; font-size: 12px; color: #555; margin-top: 5px;">
+                    <span id="char-counter" style="font-weight: bold;">3000</span>
+                </div>
+
+                <div class="checkpoints-section">
+                    <div class="checkpoints-title">Чеклист</div>
                     <div id="checkpoints-list"></div>
-                    <div style="display:flex; gap: 8px; margin-top: 8px;">
-                        <input type="text" id="new-checkpoint-input" placeholder="Новый элемент чеклиста" style="flex: 1; padding: 6px; font-size: 13px; border: 1px dashed #777; background: transparent; outline: none;">
-                        <button onclick="addCheckpoint()" style="background: #8c8c8c; color: #fff; border: none; padding: 0 12px; cursor: pointer; border-radius: 2px; font-weight: bold;">Добавить</button>
+                    <div class="checkpoints-add">
+                        <input type="text" id="new-checkpoint-input" placeholder="Новый элемент чеклиста">
+                        <button onclick="addCheckpoint()">Добавить</button>
                     </div>
                 </div>
 
                 <div class="mock-logs" id="modal-logs"></div>
                 
                 <div class="modal-save-panel">
-                    <div style="display: flex; gap: 8px; flex: 1;">
-                        <div style="position: relative;">
+                    <div class="modal-actions">
+                        <div class="modal-restore-wrapper">
                             <button class="btn-restore" id="btn-restore-board" style="display:none;" onclick="toggleBoardColumnSelect(event)">На доску</button>
-                            <div id="board-column-select" class="dropdown-menu" style="display:none; bottom: 100%; top: auto; left: 0; margin-bottom: 5px; width: 180px; z-index: 3000;"></div>
+                            <div id="board-column-select" class="dropdown-menu column-select-dropdown"></div>
                         </div>
                         <button class="btn-backlog" id="btn-to-backlog" onclick="sendCurrentTaskToBacklog()">В бэклог</button>
                         <button class="btn-archive" id="btn-to-archive" onclick="archiveCurrentTask()">В архив</button>
@@ -343,21 +358,21 @@
     </div>
 
     
-    <div class="modal-backdrop" id="col-archive-modal" style="display:none; z-index:700;">
-        <div style="margin: 60px auto; display:flex; flex-direction:column; align-items:center;">
-            <div class="column" style="width: 350px; background:#e6e6e6; border:2px solid #0000ff; padding:12px; display:flex; flex-direction:column; max-height:80vh;">
-                <div class="column-header" style="justify-content:center; position:relative;">
+    <div class="modal-backdrop" id="col-archive-modal" style="display:none;">
+        <div class="col-archive-modal-container">
+            <div class="column archive-column-modal">
+                <div class="column-header archive-column-header">
                     <span class="column-name" id="archived-col-modal-name">Название</span>
-                    <button onclick="closeArchivedColumnModal()" style="position:absolute; right:0; top:-5px; background:none; border:none; font-size:20px; cursor:pointer;">&times;</button>
+                    <button onclick="closeArchivedColumnModal()" class="archive-modal-close">&times;</button>
                 </div>
-                <div class="cards-dropzone" id="archived-col-tasks" style="flex:1; overflow-y:auto; min-height:150px; margin-bottom:15px;"></div>
-                <button onclick="restoreArchivedColumn()" style="background:#0000ff; color:white; border:none; padding:8px; margin-bottom:8px; cursor:pointer; font-weight:bold;">Вернуть на доску</button>
-                <button onclick="deleteArchivedColumn()" style="background:#cc0000; color:white; border:none; padding:8px; cursor:pointer; font-weight:bold;">Удалить навсегда</button>
+                <div class="cards-dropzone" id="archived-col-tasks"></div>
+                <button onclick="restoreArchivedColumn()" class="archive-modal-restore">Вернуть на доску</button>
+                <button onclick="deleteArchivedColumn()" class="archive-modal-delete">Удалить навсегда</button>
             </div>
         </div>
     </div>
 
-    <div id="drag-tooltip" style="display: none; position: fixed; background: rgba(0,0,0,0.8); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; z-index: 9999; pointer-events: none; transform: translate(-50%, -150%); font-weight: bold;"></div>
+    <div id="drag-tooltip" class="drag-tooltip" style="display: none;"></div>
     <script src="/app.js"></script>
 </body>
 </html>
