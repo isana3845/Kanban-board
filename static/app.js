@@ -190,6 +190,11 @@ function initListeners() {
         else alert('Выберите доску в меню папок.');
     };
     
+    const descInput = document.getElementById('modal-description');
+    if (descInput) {
+        descInput.addEventListener('input', window.updateCharCounter);
+    }
+
     setupDropdown('avatar-trigger', 'user-dropdown');
     
     document.addEventListener('click', e => {
@@ -315,23 +320,6 @@ async function renameCurrentBoard() {
     }
 }
 
-function applyBoardSettingsToUI() {
-    if (!activeBoardData) return;
-    
-    document.getElementById('title-todo').innerText = activeBoardData.col_todo_name || 'В планах';
-    document.getElementById('title-in_progress').innerText = activeBoardData.col_in_progress_name || 'В разработке';
-    document.getElementById('title-done').innerText = activeBoardData.col_done_name || 'Готово';
-
-    document.getElementById('rename-input-todo').value = activeBoardData.col_todo_name || 'В планах';
-    document.getElementById('rename-input-in_progress').value = activeBoardData.col_in_progress_name || 'В разработке';
-    document.getElementById('rename-input-done').value = activeBoardData.col_done_name || 'Готово';
-    
-    document.getElementById('wip-input-todo').value = activeBoardData.wip_todo || 0;
-    document.getElementById('wip-input-in_progress').value = activeBoardData.wip_in_progress || 0;
-    document.getElementById('wip-input-done').value = activeBoardData.wip_done || 0;
-    document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
-}
-
 // Новая единая функция для синхронизации колонок и WIP (заменяет старые saveWipLimits, renameColumn)
 window.syncBoardSettingsToServer = async function() {
     if (!activeBoardData) return;
@@ -349,7 +337,7 @@ window.syncBoardSettingsToServer = async function() {
 
     // Формируем строгий payload для предотвращения 500 ошибки (Validation Error)
     const payload = {
-        wip_enabled: activeBoardData.wip_enabled ? 1 : 0,
+        wip_enabled: 1,
         dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
         columns_data: activeBoardData.columns_data
     };
@@ -648,11 +636,9 @@ function selectBoard(board) {
     activeBoardData = board;
     document.getElementById('main-board-title').innerText = board.title;
     
-    // Показ кнопки переименования доски
     const editBtn = document.getElementById('edit-board-title-btn');
     if (editBtn) editBtn.style.display = 'block';
 
-    // Разбор динамических колонок
     try {
         activeBoardData.columns = board.columns_data ? JSON.parse(board.columns_data) : [
             {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
@@ -663,19 +649,20 @@ function selectBoard(board) {
         activeBoardData.columns = [];
     }
     
-    document.getElementById('board-wip-toggle').checked = !!board.wip_enabled;
-    
     document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
-    applyDropzonesVisibility()
-
+    
+    if (window.applyScrollModeSetting) {
+        window.applyScrollModeSetting();
+    }
+    
+    applyDropzonesVisibility();
 
     switchView('board');
-    renderColumns(); // Генерирует HTML колонок и вызывает setupDragAndDrop + renderBoardCards
+    renderColumns();
     loadTasks();
     loadMembers();
     loadChatMessages();
 
-    // Переподключение WebSocket
     if (boardSocket) {
         boardSocket.close();
     }
@@ -693,11 +680,16 @@ function selectBoard(board) {
                     activeBoardData = updatedBoard;
                     document.getElementById('main-board-title').innerText = activeBoardData.title;
                     try {
-                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [];
-                    } catch(e) {}
-                    document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
+                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [
+                            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+                            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+                            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+                        ];
+                    } catch(e) {
+                        activeBoardData.columns = [];
+                    }
                     renderColumns();
-                    updateWipIndicators(); // ДОБАВЛЕНО
+                    updateWipIndicators(); 
                 }
             }
             loadTasks();
@@ -714,6 +706,8 @@ function selectBoard(board) {
         deleteBtn.style.display = 'none';
     }
 }
+
+
 
 
 // Возврат из меню Хаба при повторном клике на иконку
@@ -847,30 +841,9 @@ async function removeMember(username) {
     if (res.ok) loadMembers();
 }
 
-// Обновленная функция активации/деактивации лимитов
-async function toggleBoardWip() {
-    if (!activeBoardData) return;
-    const isEnabled = document.getElementById('board-wip-toggle').checked ? 1 : 0;
-    activeBoardData.wip_enabled = isEnabled;
-    const actionDesc = isEnabled ? 'Включил(а) WIP лимиты доски' : 'Отключил(а) WIP лимиты доски';
-    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: actionDesc}) });
-    await syncWipToServer();
-    updateWipIndicators(); // ДОБАВЛЕНО
-    renderBoardCards(); // ДОБАВЛЕНО
-}
-
-// async function saveWipLimits() {
-//     if (!activeBoardData) return;
-//     activeBoardData.wip_todo = parseInt(document.getElementById('wip-input-todo').value) || 0;
-//     activeBoardData.wip_in_progress = parseInt(document.getElementById('wip-input-in_progress').value) || 0;
-//     activeBoardData.wip_done = parseInt(document.getElementById('wip-input-done').value) || 0;
-//     await syncWipToServer();
-// }
-
 async function syncWipToServer() {
     await fetch(`/api/boards/${activeBoardId}/wip`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(activeBoardData)
-    });
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({wip_enabled: 1, columns_data: activeBoardData.columns_data})});
     renderBoardCards();
 }
 
@@ -1011,22 +984,28 @@ function renderBoardCards() {
             
             // Обновление WIP-индикатора
             const indicator = document.getElementById(`wip-indicator-${status}`);
-            if (indicator && activeBoardData && activeBoardData.wip_enabled) {
+            if (indicator && activeBoardData) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
                 const current = counts[status];
-                indicator.textContent = `WIP: ${current}/${limit}`;
                 
-                indicator.classList.remove('warning', 'danger');
-                if (current >= limit && limit > 0) {
-                    indicator.classList.add('danger');
-                } else if (current >= limit * 0.8 && limit > 0) {
-                    indicator.classList.add('warning');
+                if (limit > 0) {
+                    indicator.textContent = `WIP: ${current}/${limit}`;
+                    indicator.style.display = 'inline-block';
+                    
+                    indicator.classList.remove('warning', 'danger');
+                    if (current >= limit) {
+                        indicator.classList.add('danger');
+                    } else if (current >= limit * 0.8) {
+                        indicator.classList.add('warning');
+                    }
+                } else {
+                    indicator.style.display = 'none';
                 }
             }
             
-            // Использование динамического лимита для текущей архитектуры колонок
-            if (activeBoardData && activeBoardData.wip_enabled) {
+            // Подсветка счётчика при превышении лимита
+            if (activeBoardData) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
                 
@@ -1035,8 +1014,6 @@ function renderBoardCards() {
                 } else {
                     countEl.classList.remove('limit-exceeded');
                 }
-            } else {
-                countEl.classList.remove('limit-exceeded');
             }
         }
     });
@@ -1086,7 +1063,6 @@ function setupDragAndDrop() {
             },
             put: function (to, from) {
                 if (to.el === from.el) return true;
-                if (!activeBoardData || !activeBoardData.wip_enabled) return true;
                 const limit = col.wip_limit;
                 if (!limit || limit <= 0) return true;
                 const currentCount = currentTasks.filter(t => t.status === col.id).length;
@@ -1185,7 +1161,10 @@ window.openModalForCreate = function(status = null) {
     restoreBtn.style.display = 'none';
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
+    window.updateCharCounter();
+
     document.getElementById('task-modal').style.display = 'block';
+
 };
 
 
@@ -1260,6 +1239,8 @@ function openModalForEdit(id) {
     }
     renderCheckpoints();
     
+    window.updateCharCounter();
+
     document.getElementById('task-modal').style.display = 'block';
 }
 
@@ -1289,6 +1270,13 @@ window.saveTask = async function() {
     const isBacklogCreation = targetColumnStatus === 'backlog_creation';
     const activeCols = activeBoardData && activeBoardData.columns ? activeBoardData.columns.filter(c => !c.archived) : [];
     const defaultCol = activeCols.length > 0 ? activeCols[0].id : 'todo';
+
+    const description = document.getElementById('modal-description').value;
+    // Фронтенд-валидация ограничения описания в 1000 символов
+    if (description && description.length > 3000) {
+        alert('Описание задачи не может превышать 1000 символов!');
+        return;
+    }
 
     const payload = {
         board_id: activeBoardId,
@@ -1347,9 +1335,14 @@ async function archiveCurrentTask() {
     closeModal();
     await loadTasks();
 
-    if (document.getElementById('analytics-archive-view').style.display === 'block')
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
         await window.openArchiveViewer();
+    }
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') {
+        await window.openBacklogViewer();
+    }
 }
+
 
 
 
@@ -1511,19 +1504,30 @@ window.openArchiveViewer = async function () {
             card.innerHTML = `
                 <div class="card-top">
                     <span>${task.title}</span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="display: flex; align-items: center;">
-                            ${progressHtml}
-                            <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
-                        </div>
-                        <button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button>
-                    </div>
                 </div>
                 <div class="card-meta-info">
                     <div>👤 ${task.assignee || '—'}</div>
                     <div>📅 ${dateStr}</div>
+                    <div><button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button></div>
                 </div>
             `;
+            
+            // card.innerHTML = `
+            //     <div class="card-top">
+            //         <span>${task.title}</span>
+            //         <div style="display: flex; align-items: center; gap: 8px;">
+            //             <div style="display: flex; align-items: center;">
+            //                 ${progressHtml}
+            //                 <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+            //             </div>
+            //             <button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button>
+            //         </div>
+            //     </div>
+            //     <div class="card-meta-info">
+            //         <div>👤 ${task.assignee || '—'}</div>
+            //         <div>📅 ${dateStr}</div>
+            //     </div>
+            // `;
 
             card.onclick = () => window.openModalForArchived(task);
             list.appendChild(card);
@@ -1697,6 +1701,8 @@ window.openModalForArchived = function(task) {
     restoreBtn.style.display = 'block';
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
+
+    window.updateCharCounter();
 
     document.getElementById('task-modal').style.display = 'block';
 }
@@ -1887,10 +1893,6 @@ window.openBacklogViewer = async function () {
             card.innerHTML = `
                 <div class="card-top">
                     <span>${task.title}</span>
-                    <div style="display: flex; align-items: center;">
-                        ${progressHtml}
-                        <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
-                    </div>
                 </div>
                 <div class="card-meta-info">
                     <div>👤 ${task.assignee || '—'}</div>
@@ -1967,6 +1969,8 @@ window.openModalForBacklog = function (task) {
     restoreBtn.style.display = 'block';
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
+
+    window.updateCharCounter();
 
     document.getElementById('task-modal').style.display = 'block';
 };
@@ -2313,4 +2317,52 @@ window.getModalDateString = function(dateId, timeId) {
     const dateVal = document.getElementById(dateId).value;
     const timeVal = document.getElementById(timeId).value || '00:00';
     return dateVal ? `${dateVal}T${timeVal}` : '';
+};
+
+window.toggleScrollMode = function() {
+    const scrollToggle = document.getElementById('board-scroll-toggle');
+    if (!scrollToggle) return;
+    
+    const isEnabled = scrollToggle.checked;
+    if (isEnabled) {
+        document.body.classList.add('global-scroll-mode');
+        localStorage.setItem('kanban-global-scroll', 'true');
+    } else {
+        document.body.classList.remove('global-scroll-mode');
+        localStorage.setItem('kanban-global-scroll', 'false');
+    }
+};
+
+window.applyScrollModeSetting = function() {
+    const scrollToggle = document.getElementById('board-scroll-toggle');
+    if (!scrollToggle) return;
+    
+    const isEnabled = localStorage.getItem('kanban-global-scroll') === 'true';
+    scrollToggle.checked = isEnabled;
+    if (isEnabled) {
+        document.body.classList.add('global-scroll-mode');
+    } else {
+        document.body.classList.remove('global-scroll-mode');
+    }
+};
+
+window.updateCharCounter = function() {
+    const descriptionInput = document.getElementById('modal-description');
+    const counterSpan = document.getElementById('char-counter');
+    
+    if (!descriptionInput || !counterSpan) return;
+    
+    const maxLength = 3000;
+    const currentLength = descriptionInput.value.length;
+    const remaining = maxLength - currentLength;
+    
+    // Обновляем текст счетчика
+    counterSpan.textContent = remaining;
+    
+    // Если осталось 0 символов (или меньше, на случай непредвиденного обхода), красим в красный
+    if (remaining <= 0) {
+        counterSpan.style.color = '#cc0000';
+    } else {
+        counterSpan.style.color = ''; // Возвращаем стандартный цвет, если текст стерли
+    }
 };

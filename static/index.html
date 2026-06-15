@@ -21,7 +21,6 @@
     <div class="app-container" id="app-content" style="display: none;">
         
         <aside class="sidebar">
-            <div class="sidebar-logo"></div>
             <nav class="sidebar-menu">
                 <div class="menu-item" id="menu-to-board" title="Текущая доска">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -227,7 +226,7 @@
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
                     
-                    <div class="settings-card">
+                    <!-- <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
                                 <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
@@ -235,7 +234,7 @@
                             </label>
                         </div>
                         <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
-                    </div>
+                    </div> -->
                         
                     <div class="settings-card">
                         <div class="wip-toggle-box">
@@ -245,6 +244,16 @@
                             </label>
                         </div>
                         <p class="settings-hint">Активация зон быстрого переноса для текущей доски.</p>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <div class="wip-toggle-box">
+                            <label>
+                                <input type="checkbox" id="board-scroll-toggle" onchange="window.toggleScrollMode()"> 
+                                Включить общий скролл доски.
+                            </label>
+                        </div>
+                        <p class="settings-hint">Активация единого скрола для текущей доски.</p>
                     </div>
 
                     <div class="settings-section">
@@ -295,14 +304,12 @@
                     
                     <div class="meta-label">Дата начала</div>
                     <div class="meta-value flex-align">
-                        <span class="meta-icon">▶️</span>
                         <input type="date" id="modal-start-date">
                         <input type="time" id="modal-start-time" value="00:00">
                     </div>
 
                     <div class="meta-label">Дедлайн</div>
                     <div class="meta-value flex-align">
-                        <span class="meta-icon">🗓️</span>
                         <input type="date" id="modal-date">
                         <input type="time" id="modal-time" value="00:00">
                     </div>
@@ -318,8 +325,11 @@
                 </div>
 
                 
-                <textarea id="modal-description" class="description-field" placeholder="Добавить описание"></textarea>
-                
+                <textarea id="modal-description" class="description-field" maxlength="3000" placeholder="Добавить описание"></textarea>
+                <div id="char-counter-container" style="text-align: right; font-size: 12px; color: #555; margin-top: 5px;">
+                    <span id="char-counter" style="font-weight: bold;">3000</span>
+                </div>
+
                 <div class="checkpoints-section">
                     <div class="checkpoints-title">Чеклист</div>
                     <div id="checkpoints-list"></div>

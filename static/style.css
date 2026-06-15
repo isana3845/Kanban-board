@@ -1,10 +1,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
-body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
+body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 0; padding: 0; overflow: hidden;}
 
 /* Изоляция скролла */
 .app-container { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
 .sidebar { width: 70px; background-color: #ffffff; border-right: 1px solid #e8e8e8; display: flex; flex-direction: column; align-items: center; padding-top: 15px; flex-shrink: 0; }
-.main-layout { display: flex; flex-direction: column; flex-grow: 1; background-color: #f8f9fa; overflow: hidden; }
+.main-layout { display: flex; flex-direction: column; flex-grow: 1; background-color: #f8f9fa; overflow: hidden; height: 100vh;}
 
 .header { height: 55px; flex-shrink: 0; background-color: #ffffff; border-bottom: 1px solid #e8e8e8; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; }
 .header-title { display: flex; align-items: center; gap: 10px; }
@@ -24,7 +24,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .wip-title { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: #555; }
 
 /* Меню настроек колонки */
-.wip-menu {z-index: 1000 !important; position: absolute; top: 100%; margin-top: 5px;min-width: 160px;}
+.wip-menu {z-index: 100 !important; position: absolute; top: 100%; margin-top: 5px;min-width: 160px; right: 0; left: auto; transform: none; }
 /* По умолчанию меню справа от кнопки */
 .column .wip-menu {left: auto !important; right: 0 !important;}
 /* Для последней колонки - меню слева от кнопки */
@@ -66,7 +66,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .owner-badge { font-size: 11px; color: #999; }
 
 /* Контентные зоны */
-.view-container { flex-grow: 1; position: relative; display: flex; overflow-y: auto; overflow-x: hidden; }
+.view-container { flex-grow: 1; position: relative; display: flex; overflow-y: auto; overflow: hidden; ;}
 .board-content, .folders-content { width: 100%; padding: 20px 25px; display: flex; flex-direction: column; min-height: 100%; }
 
 /* Папки */
@@ -83,8 +83,10 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .folder-item.active .folder-name { color: #4a90e2; font-weight: 600; }
 
 /* Колонки */
-.board-columns { display: flex; gap: 20px; flex-grow: 1; align-items: stretch; justify-content: flex-start; margin: 10px 45px 0 45px; min-height: calc(100vh - 180px); }
-.column { flex: 1; border: 2px solid; padding: 12px; display: flex; flex-direction: column; min-width: 0; border-radius: 16px; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: calc(100vh - 180px); max-height: calc(100vh - 180px); overflow-y: auto; }
+.board-columns { display: flex !important; gap: 20px; flex-grow: 1; align-items: stretch !important; justify-content: flex-start; margin: 10px 45px 20px 45px; min-height: calc(100vh - 180px); }
+.column { position: relative; flex: 1; border: 2px solid; padding: 12px; display: flex; flex-direction: column; min-width: 0; border-radius: 16px; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: calc(100vh - 180px); max-height: calc(100vh - 180px); overflow: visible; }
+
+.column:hover, .column:focus-within, .column:has(.show), .column:has(.dropdown-menu:not([style*="display: none"])) {z-index: 10;}
 .column::-webkit-scrollbar { width: 6px; }
 .column::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
 .column::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
@@ -99,6 +101,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .cards-dropzone::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); border-radius: 10px; }
 .cards-dropzone::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 10px; }
 .column-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid rgba(0, 0, 0, 0.05); }
+
 .column-info { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .column-controls { display: flex; gap: 15px; align-items: center; }
 .column-controls button { background: none; border: none; font-size: 18px; font-weight: bold; cursor: pointer; color: #999; transition: color 0.2s; }
@@ -108,7 +111,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .limit-exceeded { color: #dc3545; font-weight: bold; background: #ffeaea; }
 
 /* Карточки задач */
-.task-card { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(2px); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; position: relative; cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all 0.2s; animation: fadeInUp 0.2s ease-out; }
+.task-card { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(2px); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; position: relative; cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }  /*transition: all 0.2s; animation: fadeInUp 0.2s ease-out;*/
 .task-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(-2px); background-color: rgba(255, 255, 255, 0.9); }
 .task-card:active { cursor: grabbing; opacity: 0.9; transform: scale(0.98); }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -217,7 +220,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 
 .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.5); z-index: 500; backdrop-filter: blur(4px); }
 #task-modal, .task-modal { z-index: 2500 !important; }
-.modal-card { background-color: #ffffff; border-radius: 24px; width: 500px; margin: 60px auto; padding: 28px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+.modal-card { background-color: #ffffff; border-radius: 24px; width: 500px; margin: 40px auto; padding: 28px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
 .modal-close { position: absolute; top: 16px; right: 20px; font-size: 24px; background: none; border: none; cursor: pointer; color: #999; }
 .modal-link-btn { position: absolute; top: 18px; right: 55px; font-size: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 20px; padding: 4px 12px; cursor: pointer; font-weight: 500; color: #666; }
 .modal-link-btn:hover { background: #e0e0e0; }
@@ -229,7 +232,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .meta-value input:focus, .meta-value select:focus { border-bottom-color: #4a90e2; }
 .meta-value input[type="date"], .meta-value input[type="time"] { width: auto; flex: 1; }
 .flex-align { display: flex; align-items: center; gap: 8px; }
-.description-field { width: 100%; height: 110px; background-color: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 12px; padding: 12px; resize: none; outline: none; margin-bottom: 12px; font-family: inherit; }
+.description-field { width: 100%; height: 110px; background-color: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 12px; padding: 12px; resize: none; outline: none; font-family: inherit; }
 .description-field:focus { border-color: #4a90e2; }
 .mock-logs { font-size: 11px; color: #999; margin-bottom: 15px; border-top: 1px solid #e8e8e8; padding-top: 10px; }
 .modal-save-panel { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
@@ -272,9 +275,9 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .log-folder-icon::before { content: ''; position: absolute; left: 18px; right: 18px; top: 35px; border-top: 2px solid #4a90e2; box-shadow: 0 25px 0 #4a90e2, 0 50px 0 #4a90e2, 0 75px 0 #4a90e2; }
 .log-folder-icon::after { content: '📋'; position: absolute; right: 12px; top: 8px; font-size: 26px; }
 .log-folder-title { font-size: 16px; font-weight: 600; color: #333; text-align: center; }
-.archive-folder-icon { width: 130px; height: 150px; border: 2px solid #999; border-radius: 16px; background: #f5f5f5; position: relative; margin-bottom: 15px; }
-.archive-folder-icon::before { content: ''; position: absolute; left: 15px; right: 15px; top: 30px; height: 80px; border: 2px solid #999; background: #e8e8e8; border-radius: 8px; }
-.archive-folder-icon::after { content: ''; position: absolute; left: 45px; right: 45px; top: 65px; border-top: 4px solid #999; border-radius: 2px; }
+.archive-folder-icon { width: 130px; height: 150px; border: 2px solid #4a90e2; border-radius: 16px; background: #f5f5f5; position: relative; margin-bottom: 15px; }
+.archive-folder-icon::before { content: ''; position: absolute; left: 15px; right: 15px; top: 30px; height: 80px; border: 2px solid #4a90e2; background: #e8e8e8; border-radius: 8px; }
+.archive-folder-icon::after { content: ''; position: absolute; left: 45px; right: 45px; top: 65px; border-top: 4px solid #4a90e2; border-radius: 2px; }
 .backlog-folder-icon { width: 130px; height: 150px; border: 2px solid #4a90e2; border-radius: 16px; background: #f0f7ff; position: relative; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; }
 .backlog-folder-icon::before { content: '☰'; font-size: 60px; color: #4a90e2; }
 .gantt-folder-icon { width: 130px; height: 150px; border: 2px solid #4a90e2; border-radius: 16px; background: #f0f7ff; position: relative; margin-bottom: 15px; }
@@ -295,6 +298,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .archive-tasks-list .task-card .card-title, .backlog-tasks-list .task-card .card-title { white-space: normal; word-break: break-word; }
 .backlog-create-btn { margin-left: 10px; background-color: #4a90e2; }
 
+/* .archive-tasks-list .task-card .card-top, .backlog-tasks-list .task-card .card-top {max-height: 69px; overflow-y: hidden;} */
 /* Архив колонок */
 #col-archive-modal { z-index: 700; }
 .col-archive-modal-container { margin: 60px auto; display: flex; flex-direction: column; align-items: center; }
@@ -304,6 +308,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 .archive-modal-restore { background: #4a90e2; color: white; border: none; padding: 10px; margin-bottom: 8px; cursor: pointer; font-weight: 500; border-radius: 40px; }
 .archive-modal-delete { background: #dc3545; color: white; border: none; padding: 10px; cursor: pointer; font-weight: 500; border-radius: 40px; }
 
+.folders-content {max-height: 100vh; overflow-y: auto;}
 /* Настройки */
 .settings-card { margin: 20px 0; background: #ffffff; padding: 20px; border: 1px solid #e8e8e8; border-radius: 16px; max-width: 400px; }
 .wip-toggle-box { font-size: 16px; }
@@ -332,3 +337,63 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; }
 /* ФИКС МЕНЮ ДЛЯ ПОСЛЕДНЕЙ КОЛОНКИ - ПРОСТОЕ РЕШЕНИЕ */
 .column:last-child {overflow: visible !important;}
 .column:last-child .wip-menu {left: auto !important; right: 0 !important; transform: none !important;}
+
+body.global-scroll-mode div:has(> .column) {
+    overflow-y: auto !important;
+    height: calc(100vh - 155px) !important;
+    align-items: flex-start !important;
+}
+
+body.global-scroll-mode .column {
+    height: auto !important;
+    max-height: none !important;
+}
+
+body.global-scroll-mode .cards-dropzone {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.global-scroll-mode .column-header {
+    position: sticky !important;
+    top: 0;
+    background-color: #f8f9fa;
+    z-index: 15;
+    padding-top: 4px;
+    padding-bottom: 8px;
+}
+
+.column:hover,
+.column:focus-within,
+.column:has(.wip-menu:not([style*="display: none"])) {
+    z-index: 15 !important;
+}
+
+/* .backlog-task-item, 
+.archive-task-card,
+.task-card {
+    position: relative !important;
+    padding-right: 35px !important;
+} */
+
+.backlog-task-item .delete-task-btn,
+.archive-task-card .archive-modal-delete,
+.backlog-task-item .close-btn,
+.archive-task-card .close-btn,
+.archive-task-card .archive-modal-close {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    margin: 0 !important;
+    background: none !important;
+    border: none !important;
+    cursor: pointer !important;
+    z-index: 5 !important;
+}
+
+div#checkpoints-list {
+    max-height: 83px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
