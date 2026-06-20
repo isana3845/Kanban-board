@@ -1403,13 +1403,13 @@ async function leaveCurrentBoard() {
         // Подстановка проверенного названия доски в окно подтверждения
         if (!confirm(`Вы уверены, что хотите покинуть доску "${boardTitle}"?`)) return;
     }
-    
+
     const res = await fetch(`/api/boards/${activeBoardId}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    
+
     if (res.ok) {
         alert(`Вы вышли из доски "${boardTitle}"`);
         activeBoardId = null;
@@ -1436,18 +1436,18 @@ async function loadLogs() {
 function renderLogs(logs) {
     const container = document.getElementById('analytics-logs-list');
     container.innerHTML = '';
-    
+
     if (logs.length === 0) {
         container.innerHTML = '<div class="log-item">Нет зафиксированных действий.</div>';
         return;
     }
-    
+
     logs.forEach(log => {
         const div = document.createElement('div');
         div.className = 'log-item';
         div.innerHTML = `
-            <span class="log-time">${log.created_at}</span> 
-            <span class="log-user">${log.username}</span> 
+            <span class="log-time">${log.created_at}</span>
+            <span class="log-user">${log.username}</span>
             <span class="log-action">${log.action_desc}</span>
         `;
         container.appendChild(div);
@@ -1532,9 +1532,9 @@ window.openArchiveViewer = async function () {
                     minute: '2-digit'
                 })
                 : '—';
-            
+
             const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
-            
+
             // Исправлена проблема с версткой: progressHtml вынесен из span
             card.innerHTML = `
                 <div class="card-top">
@@ -1546,7 +1546,7 @@ window.openArchiveViewer = async function () {
                     <div><button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button></div>
                 </div>
             `;
-            
+
             // card.innerHTML = `
             //     <div class="card-top">
             //         <span>${task.title}</span>
@@ -1570,10 +1570,10 @@ window.openArchiveViewer = async function () {
     }
 
     document.querySelector('#view-analytics .folders-grid').style.display = 'none';
-    
+
     const logsView = document.getElementById('analytics-logs-view');
     if (logsView) logsView.style.display = 'none';
-    
+
     document.getElementById('analytics-archive-view').style.display = 'block';
 };
 
@@ -1604,13 +1604,13 @@ function openArchivedColumnModal(colId) {
     currentArchivedColId = colId;
     const col = activeBoardData.columns.find(c => c.id === colId);
     document.getElementById('archived-col-modal-name').innerText = col.name;
-    
+
     const tasksContainer = document.getElementById('archived-col-tasks');
     tasksContainer.innerHTML = '';
-    
+
     // Задачи архивированной колонки, которые не были отправлены в архив персонально
     const colTasks = currentTasks.filter(t => t.status === colId && t.archived === 0);
-    
+
     colTasks.forEach(task => {
         const card = document.createElement('div');
         card.className = 'task-card';
@@ -1620,7 +1620,7 @@ function openArchivedColumnModal(colId) {
         card.onclick = () => openModalForEdit(task.id);
         tasksContainer.appendChild(card);
     });
-    
+
     document.getElementById('col-archive-modal').style.display = 'flex';
 }
 
@@ -1637,7 +1637,7 @@ async function restoreArchivedColumn() {
         activeBoardData.columns.push(col); // Перенос в конец
         await syncBoardSettingsToServer();
         closeArchivedColumnModal();
-        window.openArchiveViewer(); 
+        window.openArchiveViewer();
     }
 }
 
@@ -1655,7 +1655,7 @@ async function deleteArchivedColumn() {
 window.deleteTaskPermanent = async function(taskId, event) {
     event.stopPropagation(); // Предотвращает открытие модального окна задачи
     if (!confirm('Удалить эту задачу навсегда?')) return;
-    
+
     const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (res.ok) {
         await window.openArchiveViewer();
@@ -1690,10 +1690,10 @@ window.clearArchive = async function () {
 window.openModalForArchived = function(task) {
     currentOpenedTask = task;
     editingTaskId = task.id;
-    
+
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    
+
     setModalDateFields(task.date, 'modal-date', 'modal-time');
     setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
 
@@ -1707,7 +1707,7 @@ window.openModalForArchived = function(task) {
     document.getElementById('modal-location').style.display = 'block';
 
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
-    
+
     document.getElementById('modal-comments-section').style.display = 'none';
     document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
@@ -1731,8 +1731,8 @@ window.openModalForArchived = function(task) {
 
     archiveBtn.textContent = 'В архив';
     archiveBtn.style.display = 'none';
-    
-    backlogBtn.style.display = 'block'; 
+
+    backlogBtn.style.display = 'block';
     restoreBtn.style.display = 'block';
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
@@ -1791,10 +1791,10 @@ async function openTaskFromChat(taskId) {
             alert('Не удалось загрузить задачу');
             return;
         }
-        
+
         const task = await res.json();
         const isActive = currentTasks.some(t => t.id == task.id);
-        
+
         if (isActive) {
             openModalForEdit(task.id);
         } else if (task.archived === 1) {
@@ -1802,7 +1802,7 @@ async function openTaskFromChat(taskId) {
         } else if (task.backlog === 1) {
             window.openModalForBacklog(task);
         }
-        
+
     } catch (err) {
         console.log('Сетевая ошибка при получении задачи:', err);
     }
@@ -1813,14 +1813,18 @@ async function openTaskFromChat(taskId) {
 function toggleTaskComments() {
     const panel = document.getElementById('modal-comments-section');
     const tab = document.getElementById('comments-sidebar-tab');
-    
+
     if (panel.style.display === 'none') {
+        tab.style.opacity = '0';
+        tab.style.pointerEvents = 'none';
+        setTimeout(() => { tab.style.left = '-352px'; }, 200);
         panel.style.display = 'flex';
-        tab.style.left = '-352px';
         scrollToTaskCommentsBottom();
     } else {
         panel.style.display = 'none';
         tab.style.left = '-32px';
+        tab.style.opacity = '1';
+        tab.style.pointerEvents = 'auto';
     }
 }
 
@@ -1865,22 +1869,22 @@ function renderTaskComments(comments) {
 
 
 async function sendTaskComment() {
-    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
-        ? document.getElementById('archived-task-modal') 
+    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block'
+        ? document.getElementById('archived-task-modal')
         : document.getElementById('task-modal');
-        
+
     const input = activeModal?.querySelector('#task-comment-input') || document.getElementById('task-comment-input');
     if (!input) return;
-    
+
     const content = input.value.trim();
     if (!content || !editingTaskId) return;
-    
+
     const res = await fetch(`/api/tasks/${editingTaskId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: content })
     });
-    
+
     if (res.ok) {
         input.value = '';
         await loadTaskComments(editingTaskId);
@@ -1892,12 +1896,12 @@ async function sendTaskComment() {
 function scrollToTaskCommentsBottom(passedContainer = null) {
     let container = passedContainer;
     if (!container) {
-        const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block' 
-            ? document.getElementById('archived-task-modal') 
+        const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block'
+            ? document.getElementById('archived-task-modal')
             : document.getElementById('task-modal');
         container = activeModal?.querySelector('#task-comments-list') || document.getElementById('task-comments-list');
     }
-    
+
     if (container) {
         container.scrollTop = container.scrollHeight;
     }
@@ -1921,9 +1925,9 @@ window.openBacklogViewer = async function () {
             card.dataset.id = task.id;
 
             const dateStr = task.date ? new Date(task.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-            
+
             const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
-            
+
             // Исправлена проблема с версткой: progressHtml вынесен из span
             card.innerHTML = `
                 <div class="card-top">
@@ -1959,13 +1963,13 @@ window.openModalForBacklog = function (task) {
 
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    
+
     setModalDateFields(task.date, 'modal-date', 'modal-time');
     setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
 
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
-    
+
     document.getElementById('modal-status-container').style.display = 'none';
     document.getElementById('modal-location').style.display = 'block';
 
@@ -1998,7 +2002,7 @@ window.openModalForBacklog = function (task) {
 
     archiveBtn.textContent = 'В архив';
     archiveBtn.onclick = archiveCurrentTask;
-    
+
     archiveBtn.style.display = 'block';
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'block';
@@ -2013,7 +2017,7 @@ window.openModalForBacklog = function (task) {
 
 async function sendCurrentTaskToBacklog() {
     if (!editingTaskId) return;
-    
+
     const payload = {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
@@ -2028,7 +2032,7 @@ async function sendCurrentTaskToBacklog() {
 
     await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
     await fetch(`/api/tasks/${editingTaskId}/backlog`, { method: 'PUT' });
-    
+
     closeModal();
     await loadTasks();
 
@@ -2046,7 +2050,7 @@ window.toggleBoardColumnSelect = function(event) {
         dropdown.style.display = 'none';
         return;
     }
-    
+
     const activeCols = activeBoardData.columns.filter(c => !c.archived);
     dropdown.innerHTML = '';
     activeCols.forEach(col => {
@@ -2062,7 +2066,7 @@ window.toggleBoardColumnSelect = function(event) {
         };
         dropdown.appendChild(btn);
     });
-    
+
     dropdown.style.display = 'block';
 };
 
@@ -2072,7 +2076,7 @@ async function restoreTaskFromBacklog(taskId, columnId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: columnId })
     });
-    
+
     document.getElementById('board-column-select').style.display = 'none';
     closeModal();
     await loadTasks();
@@ -2088,7 +2092,7 @@ function initSearchListener() {
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
         clearTimeout(searchTimeout);
-        
+
         if (query.length < 2) {
             document.getElementById('search-results-dropdown').style.display = 'none';
             return;
@@ -2106,11 +2110,11 @@ function initSearchListener() {
 
 async function performSearch(query) {
     if (!activeBoardId) return;
-    
+
     const res = await fetch(`/api/boards/${activeBoardId}/search?q=${encodeURIComponent(query)}`);
     if (!res.ok) return;
     const data = await res.json();
-    
+
     const dropdown = document.getElementById('search-results-dropdown');
     dropdown.innerHTML = '';
     let hasResults = false;
@@ -2134,7 +2138,7 @@ async function performSearch(query) {
             data[cat.key].forEach(item => {
                 const row = document.createElement('div');
                 row.className = 'search-result-item';
-                
+
                 if (['board', 'backlog', 'archive'].includes(cat.key)) {
                     row.innerText = item.title;
                     row.onclick = () => {
@@ -2156,7 +2160,7 @@ async function performSearch(query) {
                         openLogsViewer();
                     };
                 }
-                
+
                 dropdown.appendChild(row);
             });
         }
@@ -2174,7 +2178,7 @@ async function renameColumn(colId) {
     if (!input) return;
     const newName = input.value.trim() === '' ? 'Без названия' : input.value.trim();
     const col = activeBoardData.columns.find(c => c.id === colId);
-    
+
     if (col && col.name !== newName) {
         const oldName = col.name;
         col.name = newName;
@@ -2188,7 +2192,7 @@ function renderCheckpoints() {
     const list = document.getElementById('checkpoints-list');
     if (!list) return;
     list.innerHTML = '';
-    
+
     activeTaskCheckpoints.forEach(cp => {
         const div = document.createElement('div');
         div.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
@@ -2303,7 +2307,7 @@ async function restoreTaskFromArchive(taskId, columnId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: columnId })
     });
-    
+
     document.getElementById('board-column-select').style.display = 'none';
     closeModal();
     await loadTasks();
@@ -2326,8 +2330,8 @@ window.toggleBoardDropzones = async function() {
 window.applyDropzonesVisibility = function() {
     const dzLeft = document.getElementById('dropzone-backlog');
     const dzRight = document.getElementById('dropzone-archive');
-    const isEnabled = activeBoardData && activeBoardData.dropzones_enabled !== 0; 
-    
+    const isEnabled = activeBoardData && activeBoardData.dropzones_enabled !== 0;
+
     if (!isEnabled) {
         if (dzLeft) dzLeft.style.display = 'none';
         if (dzRight) dzRight.style.display = 'none';
@@ -2357,7 +2361,7 @@ window.getModalDateString = function(dateId, timeId) {
 window.toggleScrollMode = function() {
     const scrollToggle = document.getElementById('board-scroll-toggle');
     if (!scrollToggle) return;
-    
+
     const isEnabled = scrollToggle.checked;
     if (isEnabled) {
         document.body.classList.add('global-scroll-mode');
@@ -2371,7 +2375,7 @@ window.toggleScrollMode = function() {
 window.applyScrollModeSetting = function() {
     const scrollToggle = document.getElementById('board-scroll-toggle');
     if (!scrollToggle) return;
-    
+
     const isEnabled = localStorage.getItem('kanban-global-scroll') === 'true';
     scrollToggle.checked = isEnabled;
     if (isEnabled) {
@@ -2384,16 +2388,16 @@ window.applyScrollModeSetting = function() {
 window.updateCharCounter = function() {
     const descriptionInput = document.getElementById('modal-description');
     const counterSpan = document.getElementById('char-counter');
-    
+
     if (!descriptionInput || !counterSpan) return;
-    
+
     const maxLength = 3000;
     const currentLength = descriptionInput.value.length;
     const remaining = maxLength - currentLength;
-    
+
     // Обновляем текст счетчика
     counterSpan.textContent = remaining;
-    
+
     // Если осталось 0 символов (или меньше, на случай непредвиденного обхода), красим в красный
     if (remaining <= 0) {
         counterSpan.style.color = '#cc0000';

@@ -143,7 +143,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .filter-sort-content { display: flex; flex-direction: column; }
 .filter-assignees-list { max-height: 90px; overflow-y: auto; margin-bottom: 10px; font-size: 13px; }
 .filter-priorities { font-size: 13px; margin-bottom: 10px; }
-.filter-priorities label { display: block; cursor: pointer; margin-bottom: 4px; color: #555; }
+.filter-priorities label { display: block; cursor: pointer; margin-bottom: 4px; color: #000; }
 .filter-deadline { width: 100%; font-size: 13px; margin-bottom: 15px; padding: 8px; border: 1px solid #ddd; border-radius: 20px; background: #fff; }
 .filter-actions { display: flex; gap: 8px; }
 .filter-clear-btn { flex: 1; padding: 8px; background: #f5f5f5; color: #dc3545; border: 2px solid #f5c2c2; cursor: pointer; font-weight: 500; border-radius: 40px; transition: all 0.2s; }
@@ -181,7 +181,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 /* Боковые зоны Drag & Drop */
 .board-columns-wrapper { position: relative; flex-grow: 1; display: flex; margin-top: 10px; }
 .side-dropzone { position: absolute; top: 0; bottom: 0; width: 40px; background: rgba(74, 144, 226, 0.1); border: 2px dashed #4a90e2; z-index: 100; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; backdrop-filter: blur(4px); cursor: pointer; border-radius: 12px; }
-.side-dropzone-left { left: -45px; border-right: none; border-radius: 12px 0 0 12px; }
+.side-dropzone-left { left: -45px; border-right: none; border-radius: 0; }
 .side-dropzone-right { right: -45px; border-left: none; border-radius: 0 12px 12px 0; }
 .side-dropzone:hover { width: 60px; background: rgba(74, 144, 226, 0.2); border-color: #4a90e2; }
 .side-dropzone .dropzone-icon { opacity: 1; }
@@ -206,8 +206,8 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .btn-wip-math:hover { background-color: #e0e0e0 !important; color: #333; }
 .wip-name-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .wip-name-group input { width: 100%; height: 32px; border: 1px solid #ddd; padding: 0 8px; box-sizing: border-box; border-radius: 8px; }
-.btn-apply-rename { background-color: #f5f5f5 !important; color: #666; border: 1px solid #ddd; cursor: pointer; font-weight: 500; height: 32px; width: 100%; border-radius: 8px; font-size: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-.btn-apply-rename:hover { background-color: #e0e0e0 !important; color: #333; }
+.btn-apply-rename { background-color: #f5f5f5 !important; color: #666; border: 2px solid #d4d9e0; cursor: pointer; font-weight: 500; height: 32px; width: 100%; border-radius: 8px; font-size: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.btn-apply-rename:hover { background-color: #e0e0e0 !important; color: #333; border-color: #c5d9f0; }
 
 /* Авторизация и Модалки */
 .auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
@@ -256,9 +256,9 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .checkpoints-add button { background: #4a90e2; color: #fff; border: 2px solid #a8d0f0; padding: 8px 16px; cursor: pointer; border-radius: 20px; font-weight: 500; }
 
 /* Комментарии (сайдбар) */
-.comments-vertical-tab { position: absolute; left: -36px; top: 20px; width: 36px; height: 60px; background: #ffffff; color: #666; border: 1px solid #e0e0e0; border-right: none; border-radius: 12px 0 0 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; transition: all 0.2s; }
+.comments-vertical-tab { position: absolute; left: -36px; top: 20px; width: 36px; height: 60px; background: #ffffff; color: #666; border: 1px solid #e0e0e0; border-right: none; border-radius: 12px 0 0 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; transition: background 0.2s, color 0.2s, opacity 0.2s; }
 .comments-vertical-tab:hover { background: #f5f5f5; color: #4a90e2; }
-.comments-side-panel { position: absolute; left: -320px; top: 0; width: 320px; height: 100%; background: #ffffff; border: 1px solid #e8e8e8; border-radius: 16px 0 0 16px; display: flex; flex-direction: column; z-index: 4; box-shadow: -4px 0 12px rgba(0,0,0,0.08); }
+.comments-side-panel { position: absolute; left: -320px; top: 0; width: 320px; height: 100%; background: #ffffff; border: 1px solid #e8e8e8; border-radius: 16px; display: flex; flex-direction: column; z-index: 4; box-shadow: -4px 0 12px rgba(0,0,0,0.08); overflow: hidden; }
 .comments-header { padding: 20px 16px; border-bottom: 1px solid #e8e8e8; font-size: 14px; font-weight: 600; color: #333; }
 .comments-list { flex: 1; padding: 12px; overflow-y: auto; }
 .comments-input { padding: 12px; border-top: 1px solid #e8e8e8; }
@@ -370,7 +370,7 @@ body.global-scroll-mode .column-header {
     z-index: 15 !important;
 }
 
-/* .backlog-task-item, 
+/* .backlog-task-item,
 .archive-task-card,
 .task-card {
     position: relative !important;
@@ -395,5 +395,6 @@ body.global-scroll-mode .column-header {
 div#checkpoints-list {
     max-height: 83px;
     overflow-y: auto;
-    padding-right: 5px;
+    padding-right: 12px;
+    margin-right: -12px;
 }
