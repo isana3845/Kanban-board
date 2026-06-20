@@ -1396,8 +1396,8 @@ async function leaveCurrentBoard() {
     
     let payload = {};
     if (isOwner) {
-        const newOwner = prompt("Вы являетесь владельцем этой доски. Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:");
-        if (!newOwner) return; 
+        const newOwner = prompt("Вы являетесь владельцем доски "${boardTitle}". Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:");
+        if (!newOwner) return;
         payload.new_owner = newOwner.trim();
     } else {
         // Подстановка проверенного названия доски в окно подтверждения
@@ -1421,11 +1421,6 @@ async function leaveCurrentBoard() {
         alert(err.detail || 'Ошибка при выходе из доски');
     }
 }
-
-
-
-
-
 
 
 
@@ -1462,7 +1457,10 @@ function renderLogs(logs) {
 async function deleteCurrentBoard() {
     if (!activeBoardId) return;
 
-    if (!confirm('Удалить доску без возможности восстановления?'))
+    const board = activeBoardData || currentBoards.find(b => b.id === Number(activeBoardId) || b.id === activeBoardId);
+    const boardTitle = board ? board.title : 'текущую доску';
+
+    if (!confirm(`Удалить доску "${boardTitle}" без возможности восстановления?`))
         return;
 
     const res = await fetch(
