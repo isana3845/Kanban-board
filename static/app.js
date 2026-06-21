@@ -15,6 +15,7 @@ let currentArchivedColId = null;
 let searchTimeout = null;
 let activeTaskCheckpoints = [];
 let isDraggingTask = false;
+let selectedRole = 'student';
 
 //  НАСТРОЙКИ SORTABLE
 Sortable.defaults = {
@@ -49,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     initListeners();
     initDropzoneTooltips();
+    selectRole('student');
 });
 
 // Функция обновления WIP-индикаторов (ДОБАВЛЕНО)
@@ -108,6 +110,10 @@ async function checkAuth() {
         
         if (res.ok) {
             const userData = await res.json();
+             if (userData.role) {
+                selectedRole = userData.role;
+                updateUserRoleDisplay(userData.role);
+            }
             handleLogin(userData);
         } else {
             handleGuest();
@@ -124,21 +130,14 @@ function showLogin() {
     document.getElementById('app-content').style.display = 'none';
 }
 
-function handleLogin(userData) {
-    activeUser = userData;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-content').style.display = 'flex';
-    document.getElementById('user-display-name').innerText = userData.username;
-    switchView('folders');
-}
-
 async function loginUser() {
     const username = document.getElementById('auth-username').value.trim();
     if (!username) return;
+
     const res = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username })
-    });
-    if (res.ok) handleLogin(await res.json());
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username, role:selectedRole}
+        )});
+    if (res.ok) { const userData = await res.json(); handleLogin(userData);}
 }
 
 async function logoutUser() {
@@ -152,16 +151,29 @@ function handleGuest() {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-content').style.display = 'flex';
     document.getElementById('header-username-text').innerText = 'Вход';
+
+    const roleDisplay = document.getElementById('user-role-display');
+    if (roleDisplay) roleDisplay.style.display = 'none';
+
     switchView('folders');
 }
 
 function handleLogin(userData) {
+    userData.role = selectedRole; //добавляем роль принудительно. ВРЕМЕННО
     activeUser = userData;
     isGuest = false;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-content').style.display = 'flex';
     document.getElementById('user-display-name').innerText = userData.username;
     document.getElementById('header-username-text').innerText = userData.username;
+
+    if (userData.role) {
+        selectedRole = userData.role;
+        updateUserRoleDisplay(userData.role);
+    } else {
+        updateUserRoleDisplay('student');
+    }
+    
     switchView('folders');
 }
 
@@ -2457,3 +2469,292 @@ window.updateCharCounter = function() {
         counterSpan.style.color = ''; // Возвращаем стандартный цвет, если текст стерли
     }
 };
+
+// РОЛИ
+const isMentor = () => activeUser?.role === 'mentor';
+const isStudent = () => !isMentor();
+const canEdit = isStudent;
+const canViewOnly = isMentor;
+
+// селекторы(теги, классы и тд)
+const SELECTORS = {
+    createButtons: '.btn-create-board, .chat-toggle-btn[onclick*="createNewColumn"], .chat-toggle-btn[onclick*="openModalForCreate"], .chat-toggle-btn[onclick*="toggleColumnMenu"]',
+    columnControls: '.column-controls button, .drag-handle',
+    sideDropzones: '.side-dropzone',
+    modalButtons: '#btn-to-archive, #btn-to-backlog, #btn-restore-board, .btn-save',
+    archiveButtons: '.archive-modal-delete, .archive-modal-restore, button[onclick*="clearArchive"]',
+    backlogCreate: '.backlog-create-btn',
+    memberControls: '#new-member-name, button[onclick*="addMember"], .member-item button',
+    settingsCards: '.settings-card',
+    taskCards: '.task-card',
+    cardsDropzones: '.cards-dropzone',
+};
+
+function selectRole(role) {
+    selectedRole = role;
+    document.querySelectorAll('.role-btn').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`role-${role}-btn`).classList.add('selected');
+};
+
+function updateUserRoleDisplay(role) { //отображение роли у пользователя
+    const roleDisplay = document.getElementById('user-role-display');
+    if (!roleDisplay) return;
+    
+    if (role === 'mentor') {
+        roleDisplay.textContent = 'Наставник';
+    } else if (role === 'student') {
+        roleDisplay.textContent = 'Студент';
+    } else {
+        roleDisplay.textContent = 'Студент'; // по умолчанию
+    }
+    roleDisplay.style.display = 'inline-block';
+};
+
+// Ограничения для наставника по кнопкам
+function applyRoleRestrictions() {
+    const mentor = isMentor();
+    document.body.classList.toggle('mentor-mode', mentor);
+
+    // Скрываем/показываем элементы
+    const toggleDisplay = (selector, hide) => {
+        document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
+    };
+
+    toggleDisplay(SELECTORS.createButtons, mentor);
+    toggleDisplay(SELECTORS.columnControls, mentor);
+    toggleDisplay(SELECTORS.sideDropzones, mentor);
+    toggleDisplay(SELECTORS.modalButtons, mentor);
+    toggleDisplay(SELECTORS.archiveButtons, mentor);
+    toggleDisplay(SELECTORS.backlogCreate, mentor);
+    toggleDisplay(SELECTORS.memberControls, mentor);
+    toggleDisplay('#delete-board-btn, button[onclick*="deleteCurrentBoard"]', mentor);
+    toggleDisplay(SELECTORS.settingsCards, mentor);
+
+    const dragState = mentor ? { cursor: 'default', draggable: false, disabled: true } : { cursor: 'grab', draggable: true, disabled: false };
+
+    const mentorFooter = document.getElementById('mentor-footer');
+    if (mentorFooter) {
+        mentorFooter.style.display = mentor ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.toolbar > .chat-toggle-btn').forEach(el => { //скрываем кнопу
+        el.style.display = mentor ? 'none' : '';
+    });
+    
+    document.querySelectorAll(SELECTORS.taskCards).forEach(el => {
+        el.style.cursor = dragState.cursor;
+        el.draggable = dragState.draggable;
+    });
+    [columnSortable, ...document.querySelectorAll(SELECTORS.cardsDropzones).map(el => el.sortableInstance)].forEach(instance => {
+        if (instance) instance.option('disabled', dragState.disabled);
+    });
+
+    renderBoardCards();
+}
+
+// Ограничения по вводу и изменению
+function applyModalRestrictions() {
+    const mentor = isMentor();
+
+    ['modal-title', 'modal-assignee', 'modal-description'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = mentor;
+    });
+
+    ['modal-priority', 'modal-date', 'modal-time', 'modal-start-date', 'modal-start-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = mentor;
+    });
+
+    document.querySelectorAll(SELECTORS.modalButtons).forEach(el => el.style.display = mentor ? 'none' : '');
+
+    const checkpointsSection = document.querySelector('.checkpoints-section');
+    if (checkpointsSection) checkpointsSection.style.display = mentor ? 'none' : '';
+
+    const statusContainer = document.getElementById('modal-status-container');
+    const locationEl = document.getElementById('modal-location');
+    if (mentor) {
+        if (statusContainer) statusContainer.style.display = 'none';
+        if (locationEl) {
+            locationEl.style.display = 'block';
+            locationEl.innerText = 'Просмотр';
+        }
+    } else {
+        if (statusContainer) statusContainer.style.display = 'flex';
+        if (locationEl) locationEl.style.display = 'none';
+    }
+}
+
+function wrapModalFunction(originalFn, applyRestrictions) {
+    return function(...args) {
+        const result = originalFn?.apply(this, args);
+        setTimeout(applyRestrictions, 50);
+        return result;
+    };
+}
+
+window.openModalForEdit = wrapModalFunction(window.openModalForEdit, applyModalRestrictions);
+window.openModalForCreate = wrapModalFunction(window.openModalForCreate, applyModalRestrictions);
+window.openModalForArchived = wrapModalFunction(window.openModalForArchived, applyModalRestrictions);
+window.openModalForBacklog = wrapModalFunction(window.openModalForBacklog, applyModalRestrictions);
+
+// closeModal
+const originalCloseModal = window.closeModal;
+window.closeModal = function() {
+    originalCloseModal?.();
+
+    ['modal-title', 'modal-assignee', 'modal-description'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = false;
+    });
+
+    ['modal-priority', 'modal-date', 'modal-time', 'modal-start-date', 'modal-start-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+    });
+};
+
+// после лога пользователя
+const originalHandleLogin = window.handleLogin;
+window.handleLogin = function(userData) {
+    if (!userData.role) userData.role = selectedRole;
+
+    activeUser = userData;
+    isGuest = false;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-content').style.display = 'flex';
+    document.getElementById('user-display-name').innerText = userData.username;
+    document.getElementById('header-username-text').innerText = userData.username;
+
+    selectedRole = userData.role || 'student';
+    updateUserRoleDisplay(selectedRole);
+    applyRoleRestrictions();
+    switchView('folders');
+};
+
+// Обновление selectBoard
+const originalSelectBoard = window.selectBoard;
+window.selectBoard = function(board) {
+    if (isGuest) return showLogin();
+
+    activeBoardId = board.id;
+    activeBoardData = board;
+    document.getElementById('main-board-title').innerText = board.title;
+
+    const editBtn = document.getElementById('edit-board-title-btn');
+    if (editBtn) editBtn.style.display = 'block';
+
+    try {
+        activeBoardData.columns = board.columns_data ? JSON.parse(board.columns_data) : [
+            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+        ];
+    } catch {
+        activeBoardData.columns = [];
+    }
+
+    document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
+    if (window.applyScrollModeSetting) window.applyScrollModeSetting();
+
+    applyDropzonesVisibility();
+    switchView('board');
+    renderColumns();
+    loadTasks();
+    loadMembers();
+    loadChatMessages();
+
+    const mentorFooter = document.getElementById('mentor-footer');
+    if (mentorFooter) {
+        mentorFooter.style.display = isMentor() ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.toolbar > .chat-toggle-btn').forEach(el => {
+        el.style.display = isMentor() ? 'none' : '';
+    });
+
+    if (boardSocket) boardSocket.close();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    boardSocket = new WebSocket(`${protocol}//${window.location.host}/ws/boards/${board.id}`);
+
+    boardSocket.onmessage = async function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'update') {
+            const res = await fetch('/api/boards');
+            if (res.ok) {
+                currentBoards = await res.json();
+                const updatedBoard = currentBoards.find(b => b.id === activeBoardId);
+                if (updatedBoard) {
+                    activeBoardData = updatedBoard;
+                    document.getElementById('main-board-title').innerText = activeBoardData.title;
+                    try {
+                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [
+                            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+                            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+                            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+                        ];
+                    } catch {
+                        activeBoardData.columns = [];
+                    }
+                    renderColumns();
+                    updateWipIndicators();
+                }
+            }
+            loadTasks();
+            loadChatMessages();
+        } else if (data.type === 'chat') {
+            appendMessageToChat(data);
+        }
+    };
+
+    const deleteBtn = document.getElementById('delete-board-btn');
+    deleteBtn.style.display = (board.owner_username === activeUser.username) ? 'block' : 'none';
+
+    setTimeout(applyRoleRestrictions, 100);
+};
+
+// рендеринг колонок
+const originalRenderColumns = window.renderColumns;
+window.renderColumns = function() {
+    originalRenderColumns?.();
+    setTimeout(applyRoleRestrictions, 50);
+};
+
+// рендеринг карт
+const originalRenderBoardCards = window.renderBoardCards;
+window.renderBoardCards = function() {
+    originalRenderBoardCards?.();
+    setTimeout(applyRoleRestrictions, 50);
+}
+// ПРОВЕРКА:
+
+// // 1.Проверка роли
+// activeUser = { ...activeUser, role: 'mentor' };
+// applyRoleRestrictions();
+// applyModalRestrictions();
+// console.log(document.body.classList.contains('mentor-mode')); // Должно быть: true
+
+// 2 Переключение роли
+// Создаём кнопку переключения роли
+const toggleBtn = document.createElement('button');
+toggleBtn.innerText = '🔄 Переключить роль';
+toggleBtn.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:9999; padding:12px 24px; background:#7a4aae; color:white; border:none; border-radius:40px; font-size:14px; cursor:pointer; box-shadow:0 4px 20px rgba(0,0,0,0.2);';
+
+let isMentorMode = false;
+toggleBtn.onclick = function() {
+    isMentorMode = !isMentorMode;
+    if (activeUser) {
+        activeUser.role = isMentorMode ? 'mentor' : 'student';
+        updateUserRoleDisplay(activeUser.role);
+        applyRoleRestrictions();
+        this.innerText = isMentorMode ? '🔄 Студент' : '🔄 Наставник';
+        this.style.background = isMentorMode ? '#dc3545' : '#7a4aae';
+        console.log(`✅ Роль переключена на: ${isMentorMode ? 'Наставник' : 'Студент'}`);
+    } else {
+        alert('Сначала войдите в систему');
+    }
+};
+
+document.body.appendChild(toggleBtn);
+console.log('✅ Кнопка переключения роли добавлена!');
