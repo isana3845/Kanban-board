@@ -57,6 +57,27 @@ def add_log(db, board_id: int, username: str, action: str):
     db.execute("INSERT INTO action_logs (board_id, username, action_desc, created_at) VALUES (?, ?, ?, ?)",
                (board_id, username, action, timestamp))
 
+# Ограничение длины названий (карточки, колонки, элементы чеклиста)
+MAX_TITLE_LENGTH = 100
+
+def validate_checkpoints(checkpoints_str: str):
+    try:
+        items = json.loads(checkpoints_str) if checkpoints_str else []
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail="Некорректный формат чеклиста")
+    for item in items:
+        if len(str(item.get("text", ""))) > MAX_TITLE_LENGTH:
+            raise HTTPException(status_code=400, detail=f"Элемент чеклиста не может превышать {MAX_TITLE_LENGTH} символов")
+
+def validate_columns_data(columns_data_str: str):
+    try:
+        columns = json.loads(columns_data_str) if columns_data_str else []
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail="Некорректный формат колонок")
+    for col in columns:
+        if len(str(col.get("name", ""))) > 20:
+            raise HTTPException(status_code=400, detail=f"Название колонки не может превышать 20 символов")
+
 # Вспомогательная функция для получения читаемого названия колонки вместо col_id
 def get_column_name(db, board_id: int, status_id: str) -> str:
     if status_id == "backlog_creation" or status_id == "backlog": 
@@ -112,12 +133,12 @@ class BoardSettingsUpdate(BaseModel):
 
 class TaskData(BaseModel):
     board_id: int
-    title: str
+    title: str = Field(..., max_length=100)
     assignee: str = ""
     date: str = ""
     start_date: str = ""
     priority: str = "Средняя"
-    description: str = Field("", max_length=3000)
+    description: str = ""
     status: str
     backlog: int = 0
     checkpoints: str = "[]"
@@ -150,7 +171,7 @@ def login(data: AuthData, response: Response):
     db = get_db()
     db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (data.username,))
     db.commit()
-    response.set_cookie(key="session", value=data.username)
+    response.set_cookie(key="session", value=data.username, max_age=60 * 60 * 24 * 30)
     return {"user_id": data.username, "username": data.username}
 
 @app.get("/api/auth/me")
@@ -177,22 +198,17 @@ def get_boards(session: Optional[str] = Cookie(None)):
 def create_board(data: BoardData, session: Optional[str] = Cookie(None)):
     if not session: raise HTTPException(status_code=401)
     db = get_db()
-    default_cols = json.dumps([
-        {"id": "todo", "name": "В планах", "wip_limit": 0, "archived": False},
-        {"id": "in_progress", "name": "В разработке", "wip_limit": 0, "archived": False},
-        {"id": "done", "name": "Готово", "wip_limit": 0, "archived": False}
-    ])
-    cur = db.execute("INSERT INTO boards (title, owner_username, wip_enabled, wip_todo, wip_in_progress, wip_done, columns_data) VALUES (?, ?, 0, 0, 0, 0, ?)", 
-                     (data.title, session, default_cols))
+    cur = db.execute("INSERT INTO boards (title, owner_username, wip_enabled, wip_todo, wip_in_progress, wip_done) VALUES (?, ?, 0, 0, 0, 0)", 
+                     (data.title, session))
     board_id = cur.lastrowid
     db.execute("INSERT INTO board_members (board_id, username) VALUES (?, ?)", (board_id, session))
     add_log(db, board_id, session, f"Создал(а) доску '{data.title}'")
     db.commit()
     return {"id": board_id, "title": data.title}
 
-
 @app.put("/api/boards/{board_id}/settings")
 async def update_board_settings(board_id: int, data: BoardSettingsUpdate, session: Optional[str] = Cookie(None)):
+    validate_columns_data(data.columns_data)
     db = get_db()
     try:
         db.execute("UPDATE boards SET wip_enabled=?, dropzones_enabled=?, columns_data=? WHERE id=? AND owner_username=?",
@@ -209,6 +225,7 @@ async def delete_col_tasks(board_id: int, column_id: str, session: Optional[str]
     db.execute("DELETE FROM tasks WHERE board_id=? AND status=?", (board_id, column_id))
     add_log(db, board_id, session, f"Удалил(а) колонку и все задачи в ней навсегда")
     db.commit()
+    await manager.broadcast_update(board_id)
     return {"status": "ok"}
 
 @app.get("/api/boards/{board_id}/members")
@@ -275,7 +292,7 @@ def leave_board(board_id: int, payload: dict = None, session: Optional[str] = Co
     return {"status": "ok"}
 
 @app.put("/api/boards/{board_id}/title")
-def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[str] = Cookie(None)):
+async def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[str] = Cookie(None)):
     db = get_db()
     board = db.execute("SELECT title, owner_username FROM boards WHERE id=?", (board_id,)).fetchone()
     if not board: raise HTTPException(status_code=404)
@@ -284,6 +301,7 @@ def update_board_title(board_id: int, data: BoardTitleUpdate, session: Optional[
     db.execute("UPDATE boards SET title=? WHERE id=?", (data.title, board_id))
     add_log(db, board_id, session, f"Изменил(а) название доски с '{old_title}' на '{data.title}'")
     db.commit()
+    await manager.broadcast_update(board_id)
     return {"status": "ok", "new_title": data.title}
 
 @app.get("/api/tasks")
@@ -323,6 +341,7 @@ def get_task(task_id: int, session: Optional[str] = Cookie(None)):
 
 @app.post("/api/tasks")
 async def create_task(data: TaskData, session: Optional[str] = Cookie(None)):
+    validate_checkpoints(data.checkpoints)
     db = get_db()
     max_order = db.execute("SELECT COALESCE(MAX(sort_order), -1) FROM tasks WHERE board_id=? AND status=? AND archived=0 AND backlog=0", (data.board_id, data.status)).fetchone()[0]
     sort_order = max_order + 1
@@ -402,6 +421,7 @@ class TaskUpdatePayload(BaseModel):
 
 @app.put("/api/tasks/{task_id}")
 async def update_task(task_id: int, data: TaskData, session: Optional[str] = Cookie(None)):
+    validate_checkpoints(data.checkpoints)
     db = get_db()
     old_task = db.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
     if not old_task: raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -587,7 +607,7 @@ def get_archive(board_id: int):
     return [dict(row) for row in tasks]
 
 @app.delete("/api/boards/{board_id}/archive")
-def clear_archive(board_id: int, session: Optional[str] = Cookie(None)):
+async def clear_archive(board_id: int, session: Optional[str] = Cookie(None)):
     db = get_db()
 
     db.execute(
@@ -606,6 +626,7 @@ def clear_archive(board_id: int, session: Optional[str] = Cookie(None)):
     )
 
     db.commit()
+    await manager.broadcast_update(board_id)
 
     return {"status":"ok"}
 
@@ -620,6 +641,7 @@ async def delete_task(task_id: int, session: Optional[str] = Cookie(None)):
     
     add_log(db, task["board_id"], session, f"Удалил(а) задачу '{task['title']}' навсегда")
     db.commit()
+    await manager.broadcast_update(task["board_id"])
     
     return {"status": "ok"}
 
@@ -761,4 +783,3 @@ def search_board(board_id: int, q: str, session: Optional[str] = Cookie(None)):
     return results
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
