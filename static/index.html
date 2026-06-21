@@ -14,6 +14,10 @@
         <div class="auth-box">
             <h2>Вход в систему</h2>
             <input type="text" id="auth-username" placeholder="Ваш логин" onkeydown="if(event.key==='Enter') loginUser()">
+            <div class="auth-role-buttons">
+                <button class="role-btn" id="role-student-btn" onclick="selectRole('student')">Студент</button>
+                <button class="role-btn" id="role-mentor-btn" onclick="selectRole('mentor')">Наставник</button>
+            </div>
             <button onclick="loginUser()">Войти</button>
         </div>
     </div>
@@ -66,7 +70,9 @@
                             </div>
                             
                             <div class="dropdown-menu wide-dropdown" id="user-dropdown">
-                                <div class="dropdown-header"><strong id="user-display-name">---</strong></div>
+                                <div class="dropdown-header"><strong id="user-display-name">---</strong>
+                                <span id="user-role-display" class="dropdown-role"></span>
+                            </div>
                                 <hr>
                                 <div id="user-board-actions" style="display: none;">
                                     <div class="add-member-form">
@@ -147,12 +153,13 @@
                         <div id="dropzone-backlog" class="side-dropzone side-dropzone-left" data-target="backlog">
                             <div class="dropzone-icon">☰</div>
                         </div>
-                        
                         <div class="board-columns"></div>
-                        
                         <div id="dropzone-archive" class="side-dropzone side-dropzone-right" data-target="archive">
                             <div class="dropzone-icon">☰</div>
                         </div>
+                    </div>
+                     <div class="mentor-footer" id="mentor-footer" style="display: none;">
+                        <button class="chat-toggle-btn mentor-chat-btn" onclick="toggleChat()">💬 Чат доски</button>
                     </div>
 
                     <aside id="chat-sidebar" class="chat-sidebar" style="display: none;">
@@ -225,17 +232,6 @@
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
-                    
-                    <!-- <div class="settings-card">
-                        <div class="wip-toggle-box">
-                            <label>
-                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
-                                Включить WIP лимиты
-                            </label>
-                        </div>
-                        <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
-                    </div> -->
-                        
                     <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>

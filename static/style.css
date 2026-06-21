@@ -393,3 +393,26 @@ button[onclick*="clearArchive"]:hover { background: #cc6a7a !important; border-c
 /* Для карточек */
 .task-card.sortable-drag {transition: none !important; transform: rotate(3deg) scale(1.05) !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;}
 .task-card.sortable-ghost {opacity: 0.3 !important; transition: none !important;}
+
+/* КНОПКИ ВЫБОРА РОЛИ */
+.auth-role-buttons { display: flex; gap: 12px; margin: 10px auto 10px auto; justify-content: center; padding: 6px 12px; border: 1.5px solid #d4b8e8; border-radius: 12px; background: rgba(232, 213, 240, 0.15); width: 100%; max-width: 280px; box-sizing: border-box; }
+.role-btn { flex: 1; max-width: 150px; padding: 10px 20px; border: 2px solid transparent !important; border-radius: 40px; background: #ffffff !important; color: #7a4aae !important; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.25s ease; font-family: inherit; }
+.role-btn.selected { border-color: #7a4aae !important; background: #ffffff !important; color: #7a4aae !important; box-shadow: 0 0 0 3px rgba(122, 74, 174, 0.15) !important; }
+.role-btn:hover { background: #f8f0ff !important; border-color: #d4b8e8 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(160, 120, 200, 0.1); }
+.role-btn:active { transform: scale(0.96); }
+/* ОТОБРАЖЕНИЕ РОЛИ В АККЕ */
+.dropdown-header {display: flex; justify-content: space-between; align-items: center; gap: 12px;}
+.dropdown-role {font-size: 16px; font-weight: 700; color: #4a2a7a; background: rgba(122, 74, 174, 0.1); padding: 4px 16px; border-radius: 40px; white-space: nowrap; flex-shrink: 0;}
+
+/* Интерфейс для наставника */
+.mentor-footer {flex-shrink: 0; padding: 8px 20px 4px 0; border-top: 1px solid #e8d5f0; background: #faf5ff; display: flex; justify-content: flex-end; align-items: center; margin-bottom: 40px; border-radius: 12px 12px 0 0; min-height: 56px;}
+.mentor-footer .mentor-chat-btn {background: #7a4aae; color: white; border: 2px solid #d4b8e8; padding: 8px 32px; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 40px; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(122, 74, 174, 0.15); width: auto; min-width: 160px;}
+.mentor-footer .mentor-chat-btn:hover {background: #6a3a9e; border-color: #c8a8e0; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(122, 74, 174, 0.25);}
+body.mentor-mode .toolbar > .chat-toggle-btn {display: none !important;}
+
+/* для наставника при общем скролле */
+body.global-scroll-mode .mentor-footer {position: sticky; bottom: 20px; margin-top: auto; background: #faf5ff; border-radius: 12px 12px 0 0; z-index: 9999;padding: 8px 20px 8px 0; border-top: 1px solid #e8d5f0;}
+body.global-scroll-mode .board-content {padding-bottom: 0;}
+body.global-scroll-mode .board-columns-wrapper {flex: 1; min-height: 0;}
+body.global-scroll-mode .board-columns {height: auto !important; min-height: 300px !important;}
+body.global-scroll-mode .column {height: auto !important; max-height: none !important; min-height: 200px !important;}
