@@ -21,7 +21,6 @@
     <div class="app-container" id="app-content" style="display: none;">
         
         <aside class="sidebar">
-            <div class="sidebar-logo"></div>
             <nav class="sidebar-menu">
                 <div class="menu-item" id="menu-to-board" title="Текущая доска">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -188,7 +187,7 @@
                         </div>
                         <div class="log-folder-card" onclick="openArchiveViewer()">
                             <div class="archive-folder-icon"></div>
-                            <div class="log-folder-title">Архив задач</div>
+                            <div class="log-folder-title">Архив</div>
                         </div>
                         <div class="log-folder-card" onclick="openBacklogViewer()">
                             <div class="backlog-folder-icon"></div>
@@ -227,7 +226,7 @@
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
                     
-                    <div class="settings-card">
+                    <!-- <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
                                 <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
@@ -235,7 +234,7 @@
                             </label>
                         </div>
                         <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
-                    </div>
+                    </div> -->
                         
                     <div class="settings-card">
                         <div class="wip-toggle-box">
@@ -289,7 +288,7 @@
             <button class="modal-close" onclick="closeModal()">&times;</button>
             
             <div class="modal-body">
-                <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
+                <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок" maxlength="100">
                 
                 <div class="meta-grid">
                     <div class="meta-label">Расположение</div>
@@ -335,7 +334,7 @@
                     <div class="checkpoints-title">Чеклист</div>
                     <div id="checkpoints-list"></div>
                     <div class="checkpoints-add">
-                        <input type="text" id="new-checkpoint-input" placeholder="Новый элемент чеклиста">
+                        <input type="text" id="new-checkpoint-input" placeholder="Новый элемент чеклиста" maxlength="100">
                         <button onclick="addCheckpoint()">Добавить</button>
                     </div>
                 </div>
@@ -350,6 +349,7 @@
                         </div>
                         <button class="btn-backlog" id="btn-to-backlog" onclick="sendCurrentTaskToBacklog()">В бэклог</button>
                         <button class="btn-archive" id="btn-to-archive" onclick="archiveCurrentTask()">В архив</button>
+                        <button class="btn-delete" id="btn-delete-task" onclick="deleteCurrentTask()" title="Удалить задачу навсегда">Удалить</button>
                     </div>
                     <button class="btn-save" onclick="saveTask()">Сохранить</button>
                 </div>

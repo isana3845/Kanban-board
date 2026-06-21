@@ -131,6 +131,10 @@ async function loginUser() {
 
 async function logoutUser() {
     await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+        localStorage.removeItem('kanban_lastBoardId');
+        localStorage.removeItem('kanban_lastView');
+    } catch (e) {}
     location.reload();
 }
 
@@ -150,7 +154,34 @@ function handleLogin(userData) {
     document.getElementById('app-content').style.display = 'flex';
     document.getElementById('user-display-name').innerText = userData.username;
     document.getElementById('header-username-text').innerText = userData.username;
-    switchView('folders');
+    restoreLastView();
+}
+
+// Восстановление доски/экрана, на котором пользователь был до обновления страницы
+function restoreLastView() {
+    let lastBoardId = null;
+    let lastView = null;
+    try {
+        lastBoardId = localStorage.getItem('kanban_lastBoardId');
+        lastView = localStorage.getItem('kanban_lastView');
+    } catch (e) {}
+
+    if (lastView === 'board' && lastBoardId) {
+        fetch('/api/boards')
+            .then(res => res.ok ? res.json() : [])
+            .then(boards => {
+                currentBoards = boards;
+                const board = boards.find(b => String(b.id) === String(lastBoardId));
+                if (board) {
+                    selectBoard(board);
+                } else {
+                    switchView('folders');
+                }
+            })
+            .catch(() => switchView('folders'));
+    } else {
+        switchView('folders');
+    }
 }
 
 
@@ -246,7 +277,7 @@ function renderColumns() {
                     <div class="dropdown-menu wip-menu" id="menu-wip-${col.id}" onclick="event.stopPropagation()">
                         <div class="wip-title">Название:</div>
                         <div class="wip-name-group">
-                            <input type="text" id="rename-input-${col.id}" value="${col.name}" onclick="this.select()">
+                            <input type="text" id="rename-input-${col.id}" value="${col.name}" maxlength="100" onclick="this.select()">
                             <button onclick="renameColumn('${col.id}')" class="btn-apply-rename">ОК</button>
                         </div>
                         <hr style="margin: 8px 0;">
@@ -257,7 +288,8 @@ function renderColumns() {
                             <button class="btn-wip-math" onclick="event.stopPropagation(); changeWip('${col.id}', -1)">-</button>
                         </div>
                         <hr style="margin: 8px 0;">
-                        <button onclick="archiveColumn('${col.id}')" style="width:100%; background:#cc0000; color:white; border:none; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold;">В архив колонку</button>
+                        <button onclick="archiveColumn('${col.id}')" style="width:100%; background:#cc0000; color:white; border:none; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold;">В архив</button>
+                        <button onclick="deleteColumn('${col.id}')" style="width:100%; margin-top:6px; background:#fff0f0; color:#cc0000; border:1px solid #cc0000; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold;">Удалить колонку навсегда</button>
                     </div>
                 </div>
             </div>
@@ -283,11 +315,16 @@ async function createNewColumn() {
     if (!activeBoardId) return;
     const name = prompt('Введите название новой колонки:');
     if (!name || name.trim() === '') return;
+    const trimmedName = name.trim();
+    if (trimmedName.length > 20) {
+        alert('Название колонки не может превышать 20 символов!');
+        return;
+    }
     
     const colId = 'col_' + Date.now();
-    activeBoardData.columns.push({ id: colId, name: name.trim(), wip_limit: 0, archived: false });
+    activeBoardData.columns.push({ id: colId, name: trimmedName, wip_limit: 0, archived: false });
     
-    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Создал(а) новую колонку '${name.trim()}'`}) });
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Создал(а) новую колонку '${trimmedName}'`}) });
     await syncBoardSettingsToServer();
 }
 
@@ -296,6 +333,27 @@ async function archiveColumn(colId) {
     const col = activeBoardData.columns.find(c => c.id === colId);
     if (col) col.archived = true;
     await syncBoardSettingsToServer();
+}
+
+// Безвозвратное удаление колонки (и всех задач внутри неё) прямо с доски, без архивации
+async function deleteColumn(colId) {
+    if (!activeBoardId) return;
+
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+    if (activeCols.length <= 1) {
+        alert('Нельзя удалить последнюю колонку на доске!');
+        return;
+    }
+
+    const col = activeBoardData.columns.find(c => c.id === colId);
+    if (!col) return;
+    if (!confirm(`Удалить колонку "${col.name}" и ВСЕ задачи внутри неё безвозвратно? Это действие нельзя отменить.`)) return;
+
+    await fetch(`/api/boards/${activeBoardId}/columns/${colId}/tasks`, { method: 'DELETE' });
+    activeBoardData.columns = activeBoardData.columns.filter(c => c.id !== colId);
+    await syncBoardSettingsToServer();
+    renderColumns();
+    await loadTasks();
 }
 
 async function renameCurrentBoard() {
@@ -320,32 +378,18 @@ async function renameCurrentBoard() {
     }
 }
 
-function applyBoardSettingsToUI() {
-    if (!activeBoardData) return;
-    
-    document.getElementById('title-todo').innerText = activeBoardData.col_todo_name || 'В планах';
-    document.getElementById('title-in_progress').innerText = activeBoardData.col_in_progress_name || 'В разработке';
-    document.getElementById('title-done').innerText = activeBoardData.col_done_name || 'Готово';
-
-    document.getElementById('rename-input-todo').value = activeBoardData.col_todo_name || 'В планах';
-    document.getElementById('rename-input-in_progress').value = activeBoardData.col_in_progress_name || 'В разработке';
-    document.getElementById('rename-input-done').value = activeBoardData.col_done_name || 'Готово';
-    
-    document.getElementById('wip-input-todo').value = activeBoardData.wip_todo || 0;
-    document.getElementById('wip-input-in_progress').value = activeBoardData.wip_in_progress || 0;
-    document.getElementById('wip-input-done').value = activeBoardData.wip_done || 0;
-    document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
-}
-
 // Новая единая функция для синхронизации колонок и WIP (заменяет старые saveWipLimits, renameColumn)
 window.syncBoardSettingsToServer = async function() {
-    if (!activeBoardData) return;
+    if (!activeBoardData) return true;
 
     activeBoardData.columns.forEach(c => {
         if (!c.archived) {
             const nameInput = document.getElementById(`rename-input-${c.id}`);
             const wipInput = document.getElementById(`wip-input-${c.id}`);
-            if (nameInput) c.name = nameInput.value.trim() === '' ? 'Без названия' : nameInput.value.trim();
+            if (nameInput) {
+                const trimmedName = nameInput.value.trim().slice(0, 100);
+                c.name = trimmedName === '' ? 'Без названия' : trimmedName;
+            }
             if (wipInput) c.wip_limit = parseInt(wipInput.value) || 0;
         }
     });
@@ -354,16 +398,46 @@ window.syncBoardSettingsToServer = async function() {
 
     // Формируем строгий payload для предотвращения 500 ошибки (Validation Error)
     const payload = {
-        wip_enabled: activeBoardData.wip_enabled ? 1 : 0,
+        wip_enabled: 1,
         dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
         columns_data: activeBoardData.columns_data
     };
 
-    await fetch(`/api/boards/${activeBoardId}/settings`, {
+    const res = await fetch(`/api/boards/${activeBoardId}/settings`, {
         method: 'PUT', 
         headers: { 'Content-Type': 'application/json'}, 
         body: JSON.stringify(payload)
     });
+
+    if (!res.ok) {
+        // Сервер отклонил изменение — сообщаем причину и откатываем локальное состояние,
+        // чтобы интерфейс не показывал изменения, которые на самом деле не сохранились
+        let message = 'Не удалось сохранить изменения колонок.';
+        try {
+            const errData = await res.json();
+            if (errData && errData.detail) message = errData.detail;
+        } catch (e) {}
+        alert(message);
+
+        try {
+            const boardsRes = await fetch('/api/boards');
+            if (boardsRes.ok) {
+                currentBoards = await boardsRes.json();
+                const freshBoard = currentBoards.find(b => b.id === activeBoardId);
+                if (freshBoard) {
+                    activeBoardData = freshBoard;
+                    try {
+                        activeBoardData.columns = freshBoard.columns_data ? JSON.parse(freshBoard.columns_data) : [];
+                    } catch (e) {
+                        activeBoardData.columns = [];
+                    }
+                    renderColumns();
+                }
+            }
+        } catch (e) {}
+
+        return false;
+    }
 
     applyDropzonesVisibility();
     updateWipIndicators();
@@ -373,6 +447,7 @@ window.syncBoardSettingsToServer = async function() {
             if (titleSpan) titleSpan.innerText = col.name;
         }
     });
+    return true;
 };
 
 
@@ -477,6 +552,8 @@ function toggleColumnMenu(menuId, event) {
 }
 
 function switchView(view) {
+    try { localStorage.setItem('kanban_lastView', view); } catch (e) {}
+
     document.getElementById('view-kanban').style.display = view === 'board' ? 'flex' : 'none';
     document.getElementById('view-folders').style.display = view === 'folders' ? 'flex' : 'none';
     document.getElementById('view-analytics').style.display = view === 'analytics' ? 'block' : 'none';
@@ -651,6 +728,7 @@ function selectBoard(board) {
     
     activeBoardId = board.id;
     activeBoardData = board;
+    try { localStorage.setItem('kanban_lastBoardId', String(board.id)); } catch (e) {}
     document.getElementById('main-board-title').innerText = board.title;
     
     const editBtn = document.getElementById('edit-board-title-btn');
@@ -666,7 +744,6 @@ function selectBoard(board) {
         activeBoardData.columns = [];
     }
     
-    document.getElementById('board-wip-toggle').checked = !!board.wip_enabled;
     document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
     
     if (window.applyScrollModeSetting) {
@@ -706,7 +783,6 @@ function selectBoard(board) {
                     } catch(e) {
                         activeBoardData.columns = [];
                     }
-                    document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
                     renderColumns();
                     updateWipIndicators(); 
                 }
@@ -860,30 +936,9 @@ async function removeMember(username) {
     if (res.ok) loadMembers();
 }
 
-// Обновленная функция активации/деактивации лимитов
-async function toggleBoardWip() {
-    if (!activeBoardData) return;
-    const isEnabled = document.getElementById('board-wip-toggle').checked ? 1 : 0;
-    activeBoardData.wip_enabled = isEnabled;
-    const actionDesc = isEnabled ? 'Включил(а) WIP лимиты доски' : 'Отключил(а) WIP лимиты доски';
-    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: actionDesc}) });
-    await syncWipToServer();
-    updateWipIndicators(); // ДОБАВЛЕНО
-    renderBoardCards(); // ДОБАВЛЕНО
-}
-
-// async function saveWipLimits() {
-//     if (!activeBoardData) return;
-//     activeBoardData.wip_todo = parseInt(document.getElementById('wip-input-todo').value) || 0;
-//     activeBoardData.wip_in_progress = parseInt(document.getElementById('wip-input-in_progress').value) || 0;
-//     activeBoardData.wip_done = parseInt(document.getElementById('wip-input-done').value) || 0;
-//     await syncWipToServer();
-// }
-
 async function syncWipToServer() {
     await fetch(`/api/boards/${activeBoardId}/wip`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(activeBoardData)
-    });
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({wip_enabled: 1, columns_data: activeBoardData.columns_data})});
     renderBoardCards();
 }
 
@@ -1024,22 +1079,28 @@ function renderBoardCards() {
             
             // Обновление WIP-индикатора
             const indicator = document.getElementById(`wip-indicator-${status}`);
-            if (indicator && activeBoardData && activeBoardData.wip_enabled) {
+            if (indicator && activeBoardData) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
                 const current = counts[status];
-                indicator.textContent = `WIP: ${current}/${limit}`;
                 
-                indicator.classList.remove('warning', 'danger');
-                if (current >= limit && limit > 0) {
-                    indicator.classList.add('danger');
-                } else if (current >= limit * 0.8 && limit > 0) {
-                    indicator.classList.add('warning');
+                if (limit > 0) {
+                    indicator.textContent = `WIP: ${current}/${limit}`;
+                    indicator.style.display = 'inline-block';
+                    
+                    indicator.classList.remove('warning', 'danger');
+                    if (current >= limit) {
+                        indicator.classList.add('danger');
+                    } else if (current >= limit * 0.8) {
+                        indicator.classList.add('warning');
+                    }
+                } else {
+                    indicator.style.display = 'none';
                 }
             }
             
-            // Использование динамического лимита для текущей архитектуры колонок
-            if (activeBoardData && activeBoardData.wip_enabled) {
+            // Подсветка счётчика при превышении лимита
+            if (activeBoardData) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
                 
@@ -1048,8 +1109,6 @@ function renderBoardCards() {
                 } else {
                     countEl.classList.remove('limit-exceeded');
                 }
-            } else {
-                countEl.classList.remove('limit-exceeded');
             }
         }
     });
@@ -1067,7 +1126,7 @@ function setupDragAndDrop() {
         if (el.sortableInstance) el.sortableInstance.destroy();
         
         el.sortableInstance = new Sortable(el, {
-            group: 'kanban',
+            group: { name: 'kanban', pull: true, put: ['kanban'] },
             animation: 150,
             onStart: () => { isDraggingTask = true; },
             onEnd: async (e) => {
@@ -1099,7 +1158,6 @@ function setupDragAndDrop() {
             },
             put: function (to, from) {
                 if (to.el === from.el) return true;
-                if (!activeBoardData || !activeBoardData.wip_enabled) return true;
                 const limit = col.wip_limit;
                 if (!limit || limit <= 0) return true;
                 const currentCount = currentTasks.filter(t => t.status === col.id).length;
@@ -1108,14 +1166,19 @@ function setupDragAndDrop() {
         });
     });
 
-    // Инициализация боковых зон как валидных приемников Sortable
+    // Инициализация боковых зон как валидных приемников Sortable.
+    // Зона "Архив" дополнительно принимает колонки (группа 'columns'), зона "Бэклог" — только задачи.
     ['dropzone-backlog', 'dropzone-archive'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         if (el.sortableInstance) el.sortableInstance.destroy();
 
         el.sortableInstance = new Sortable(el, {
-            group: 'kanban',
+            group: {
+                name: 'kanban',
+                pull: true,
+                put: id === 'dropzone-archive' ? ['kanban', 'columns'] : ['kanban']
+            },
             animation: 150
         });
     });
@@ -1129,7 +1192,20 @@ function setupDragAndDrop() {
         handle: '.drag-handle',
         direction: 'horizontal',
         forceFallback: true,
+        group: { name: 'columns', pull: true, put: ['columns'] },
         onEnd: async (e) => {
+            // Колонку перетащили в боковую зону "Архив"
+            if (e.to.id === 'dropzone-archive') {
+                const colId = e.item.dataset.id;
+                const col = activeBoardData.columns.find(c => c.id === colId);
+                if (col && confirm(`Отправить колонку "${col.name}" и все её задачи в архив?`)) {
+                    col.archived = true;
+                    await syncBoardSettingsToServer();
+                }
+                renderColumns(); // в любом случае возвращаем колонки на место/перерисовываем
+                return;
+            }
+
             const active = activeBoardData.columns.filter(c => !c.archived);
             const archived = activeBoardData.columns.filter(c => c.archived);
             
@@ -1192,10 +1268,12 @@ window.openModalForCreate = function(status = null) {
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
+    const deleteBtn = document.getElementById('btn-delete-task');
 
     archiveBtn.style.display = 'none';
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'none';
+    if (deleteBtn) deleteBtn.style.display = 'none';
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     window.updateCharCounter();
@@ -1221,8 +1299,10 @@ function openModalForEdit(id) {
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
+    const deleteBtn = document.getElementById('btn-delete-task');
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
+    if (deleteBtn) deleteBtn.style.display = 'block';
 
     if (locEl) {
         if (col && col.archived) {
@@ -1303,10 +1383,23 @@ function closeModal() {
 
 
 
+// Валидация заголовка задачи (ограничение 100 символов)
+function getValidatedTaskTitle() {
+    const value = document.getElementById('modal-title').value.trim();
+    if (value.length > 100) {
+        alert('Название задачи не может превышать 100 символов!');
+        return null;
+    }
+    return value || 'Без названия';
+}
+
 window.saveTask = async function() {
     const isBacklogCreation = targetColumnStatus === 'backlog_creation';
     const activeCols = activeBoardData && activeBoardData.columns ? activeBoardData.columns.filter(c => !c.archived) : [];
     const defaultCol = activeCols.length > 0 ? activeCols[0].id : 'todo';
+
+    const title = getValidatedTaskTitle();
+    if (title === null) return;
 
     const description = document.getElementById('modal-description').value;
     // Фронтенд-валидация ограничения описания в 1000 символов
@@ -1317,7 +1410,7 @@ window.saveTask = async function() {
 
     const payload = {
         board_id: activeBoardId,
-        title: document.getElementById('modal-title').value || 'Без названия',
+        title: title,
         assignee: document.getElementById('modal-assignee').value,
         date: getModalDateString('modal-date', 'modal-time'),
         start_date: getModalDateString('modal-start-date', 'modal-start-time'),
@@ -1342,9 +1435,12 @@ window.saveTask = async function() {
 async function archiveCurrentTask() {
     if (!editingTaskId) return;
 
+    const title = getValidatedTaskTitle();
+    if (title === null) return;
+
     const payload = {
         board_id: activeBoardId,
-        title: document.getElementById('modal-title').value || 'Без названия',
+        title: title,
         assignee: document.getElementById('modal-assignee').value,
         date: getModalDateString('modal-date', 'modal-time'),
         start_date: getModalDateString('modal-start-date', 'modal-start-time'),
@@ -1379,6 +1475,32 @@ async function archiveCurrentTask() {
         await window.openBacklogViewer();
     }
 }
+
+
+// Удаление задачи навсегда
+async function deleteCurrentTask() {
+    if (!editingTaskId) return;
+    if (!confirm('Удалить задачу навсегда? Это действие нельзя отменить.')) return;
+
+    const res = await fetch(`/api/tasks/${editingTaskId}`, { method: 'DELETE' });
+
+    if (!res.ok) {
+        alert('Ошибка при удалении задачи');
+        return;
+    }
+
+    closeModal();
+    await loadTasks();
+
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
+        await window.openArchiveViewer();
+    }
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') {
+        await window.openBacklogViewer();
+    }
+}
+
+
 
 
 
@@ -1585,7 +1707,7 @@ function renderArchivedColumnsList() {
     if (!container) {
         const listContainer = document.getElementById('archive-tasks-list').parentNode;
         const colSection = document.createElement('div');
-        colSection.innerHTML = `<h3 style="margin:20px 0 10px; border-bottom:2px solid #0000ff; padding-bottom:5px;">Архив колонок</h3><div id="archive-columns-list" style="display:flex; flex-wrap:wrap; gap:16px;"></div><h3 style="margin:20px 0 10px; border-bottom:2px solid #0000ff; padding-bottom:5px;">Архив задач</h3>`;
+        colSection.innerHTML = `<h3 style="margin:20px 0 10px; border-bottom:2px solid #0000ff; padding-bottom:5px;">Архив колонок</h3><div id="archive-columns-list" style="display:flex; flex-wrap:wrap; gap:16px;"></div><h3 style="margin:20px 0 10px; border-bottom:2px solid #0000ff; padding-bottom:5px;">Архив</h3>`;
         listContainer.insertBefore(colSection, document.getElementById('archive-tasks-list'));
         container = document.getElementById('archive-columns-list');
     }
@@ -1730,12 +1852,14 @@ window.openModalForArchived = function(task) {
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
+    const deleteBtn = document.getElementById('btn-delete-task');
 
     archiveBtn.textContent = 'В архив';
     archiveBtn.style.display = 'none';
     
     backlogBtn.style.display = 'block'; 
     restoreBtn.style.display = 'block';
+    if (deleteBtn) deleteBtn.style.display = 'block';
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
@@ -1997,6 +2121,7 @@ window.openModalForBacklog = function (task) {
     const archiveBtn = document.getElementById('btn-to-archive');
     const backlogBtn = document.getElementById('btn-to-backlog');
     const restoreBtn = document.getElementById('btn-restore-board');
+    const deleteBtn = document.getElementById('btn-delete-task');
 
     archiveBtn.textContent = 'В архив';
     archiveBtn.onclick = archiveCurrentTask;
@@ -2004,6 +2129,7 @@ window.openModalForBacklog = function (task) {
     archiveBtn.style.display = 'block';
     backlogBtn.style.display = 'none';
     restoreBtn.style.display = 'block';
+    if (deleteBtn) deleteBtn.style.display = 'block';
 
     restoreBtn.onclick = window.toggleBoardColumnSelect;
 
@@ -2207,6 +2333,10 @@ function addCheckpoint() {
     const input = document.getElementById('new-checkpoint-input');
     const text = input.value.trim();
     if (!text) return;
+    if (text.length > 100) {
+        alert('Элемент чеклиста не может превышать 100 символов!');
+        return;
+    }
     activeTaskCheckpoints.push({ id: Date.now(), text: text, done: false });
     input.value = '';
     renderCheckpoints();
@@ -2294,6 +2424,17 @@ function initDropzoneTooltips() {
         el.addEventListener('drop', () => {
             tooltip.style.display = 'none';
             el.classList.remove('drag-active');
+        });
+
+        // Клик по боковой зоне (без перетаскивания) переносит пользователя на экран Архива/Бэклога
+        el.addEventListener('click', () => {
+            if (isDraggingTask) return;
+            switchView('analytics');
+            if (el.dataset.target === 'archive') {
+                window.openArchiveViewer();
+            } else if (el.dataset.target === 'backlog') {
+                window.openBacklogViewer();
+            }
         });
     });
 }
