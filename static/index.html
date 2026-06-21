@@ -129,12 +129,12 @@
                                         <option value="date">По дедлайну</option>
                                         <option value="priority">По важности</option>
                                     </select>
-
+                                    
                                     <hr>
-
+                                    
                                     <div class="wip-title">Исполнитель:</div>
                                     <div id="filter-assignees" class="filter-assignees-list"></div>
-
+                                    
                                     <div class="wip-title">Важность:</div>
                                     <div class="filter-priorities">
                                         <label><input type="checkbox" class="filter-priority" value="Высокая"> Высокая</label>
@@ -165,9 +165,9 @@
                         <div id="dropzone-backlog" class="side-dropzone side-dropzone-left" data-target="backlog">
                             <div class="dropzone-icon">☰</div>
                         </div>
-
+                        
                         <div class="board-columns"></div>
-
+                        
                         <div id="dropzone-archive" class="side-dropzone side-dropzone-right" data-target="archive">
                             <div class="dropzone-icon">☰</div>
                         </div>
@@ -243,21 +243,21 @@
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
-
-                    <div class="settings-card">
+                    
+                    <!-- <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
-                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()">
+                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
                                 Включить WIP лимиты
                             </label>
                         </div>
                         <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
-                    </div>
-
+                    </div> -->
+                        
                     <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
-                                <input type="checkbox" id="board-dropzones-toggle" onchange="toggleBoardDropzones()">
+                                <input type="checkbox" id="board-dropzones-toggle" onchange="toggleBoardDropzones()"> 
                                 Включить боковые зоны (Бэклог/Архив)
                             </label>
                         </div>
@@ -267,7 +267,7 @@
                     <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
-                                <input type="checkbox" id="board-scroll-toggle" onchange="window.toggleScrollMode()">
+                                <input type="checkbox" id="board-scroll-toggle" onchange="window.toggleScrollMode()"> 
                                 Включить общий скролл доски.
                             </label>
                         </div>
@@ -278,7 +278,6 @@
                         <h2>Обратная связь</h2>
                         <a href="https://forms.yandex.ru/u/6a24fddbf47e7336edd5943d" target="_blank" class="feedback-btn">Оставить отзыв</a>
                     </div>
-
                 </main>
             </div>
         </div>
@@ -292,7 +291,6 @@
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
             </div>
-
             <div id="modal-comments-section" class="comments-side-panel" style="display: none;">
                 <div class="comments-header">Комментарии задачи</div>
                 <div class="chat-messages comments-list" id="task-comments-list"></div>
@@ -307,19 +305,17 @@
 
             <div class="modal-body">
                 <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок">
-
+                
                 <div class="meta-grid">
                     <div class="meta-label">Расположение</div>
                     <div class="meta-value flex-align" id="modal-status-container">
                         <select id="modal-status-select"></select>
                     </div>
                     <div class="meta-value" id="modal-location" style="display:none;"></div>
-
                     <div class="meta-label">Исполнитель</div>
                     <div class="meta-value flex-align">
                         <span class="avatar-dot"></span><input type="text" id="modal-assignee">
                     </div>
-
                     <div class="meta-label">Дата начала</div>
                     <div class="meta-value flex-align">
                         <input type="date" id="modal-start-date">
@@ -331,7 +327,6 @@
                         <input type="date" id="modal-date">
                         <input type="time" id="modal-time" value="00:00">
                     </div>
-
                     <div class="meta-label">Важность</div>
                     <div class="meta-value flex-align">
                         <select id="modal-priority">
@@ -341,7 +336,6 @@
                         </select>
                     </div>
                 </div>
-
 
                 <textarea id="modal-description" class="description-field" maxlength="3000" placeholder="Добавить описание"></textarea>
                 <div id="char-counter-container" style="text-align: right; font-size: 12px; color: #555; margin-top: 5px;">
@@ -373,7 +367,6 @@
             </div>
         </div>
     </div>
-
 
     <div class="modal-backdrop" id="col-archive-modal" style="display:none;">
         <div class="col-archive-modal-container">
