@@ -220,7 +220,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 
 .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.5); z-index: 500; backdrop-filter: blur(4px); }
 #task-modal, .task-modal { z-index: 2500 !important; }
-.modal-card { background-color: #ffffff; border-radius: 24px; width: 500px; margin: 40px auto; padding: 28px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+.modal-card { background-color: #ffffff; border-radius: 24px; border-top-left-radius: 0; width: 500px; margin: 40px auto; padding: 28px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
 .modal-close { position: absolute; top: 16px; right: 20px; font-size: 24px; background: none; border: none; cursor: pointer; color: #999; }
 .modal-link-btn { position: absolute; top: 18px; right: 55px; font-size: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 20px; padding: 4px 12px; cursor: pointer; font-weight: 500; color: #666; }
 .modal-link-btn:hover { background: #e0e0e0; }
@@ -256,7 +256,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .checkpoints-add button { background: #4a90e2; color: #fff; border: 2px solid #a8d0f0; padding: 8px 16px; cursor: pointer; border-radius: 20px; font-weight: 500; }
 
 /* Комментарии (сайдбар) */
-.comments-vertical-tab { position: absolute; left: -36px; top: 20px; width: 36px; height: 60px; background: #ffffff; color: #666; border: 1px solid #e0e0e0; border-right: none; border-radius: 12px 0 0 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; transition: background 0.2s, color 0.2s, opacity 0.2s; }
+.comments-vertical-tab { position: absolute; left: -36px; top: 0; width: 36px; height: 60px; background: #ffffff; color: #666; border: 1px solid #e0e0e0; border-right: none; border-radius: 12px 0 0 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 6; transition: background 0.2s, color 0.2s; }
 .comments-vertical-tab:hover { background: #f5f5f5; color: #4a90e2; }
 .comments-side-panel { position: absolute; left: -320px; top: 0; width: 320px; height: 100%; background: #ffffff; border: 1px solid #e8e8e8; border-radius: 16px; display: flex; flex-direction: column; z-index: 4; box-shadow: -4px 0 12px rgba(0,0,0,0.08); overflow: hidden; }
 .comments-header { padding: 20px 16px; border-bottom: 1px solid #e8e8e8; font-size: 14px; font-weight: 600; color: #333; }

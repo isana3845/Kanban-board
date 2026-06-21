@@ -1265,17 +1265,16 @@ function openModalForEdit(id) {
     document.getElementById('modal-location').style.display = 'block';
 
     document.getElementById('modal-comments-section').style.display = 'none';
-    document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
     loadTaskComments(id);
-    
+
     try {
         activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
     } catch (e) {
         activeTaskCheckpoints = [];
     }
     renderCheckpoints();
-    
+
     window.updateCharCounter();
 
     document.getElementById('task-modal').style.display = 'block';
@@ -1285,17 +1284,15 @@ function openModalForEdit(id) {
 
 
 
-function closeModal() { 
-    document.getElementById('task-modal').style.display = 'none'; 
-    
+function closeModal() {
+    document.getElementById('task-modal').style.display = 'none';
+
     const commentsSection = document.getElementById('modal-comments-section');
-    const tab = document.getElementById('comments-sidebar-tab');
     if (commentsSection) commentsSection.style.display = 'none';
-    if (tab) tab.style.left = '-32px';
-    
+
     const input = document.getElementById('task-comment-input');
     if (input) input.value = '';
-    
+
     editingTaskId = null;
     currentOpenedTask = null;
     activeTaskCheckpoints = [];
@@ -1327,10 +1324,10 @@ window.saveTask = async function() {
         backlog: isBacklogCreation ? 1 : 0,
         checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
-    
+
     if (editingTaskId) await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
     else await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-    
+
     closeModal();
     await loadTasks();
 
@@ -1354,10 +1351,10 @@ async function archiveCurrentTask() {
         checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
 
-    await fetch(`/api/tasks/${editingTaskId}`, { 
-        method: 'PUT', 
-        headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify(payload) 
+    await fetch(`/api/tasks/${editingTaskId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
     });
 
     const res = await fetch(`/api/tasks/${editingTaskId}/archive`, {
@@ -1388,15 +1385,15 @@ async function leaveCurrentBoard() {
         alert('Активная доска не выбрана');
         return;
     }
-    
+
     // Гарантированный поиск объекта доски по ID в общем массиве
     const board = activeBoardData || currentBoards.find(b => b.id === Number(activeBoardId) || b.id === activeBoardId);
     const boardTitle = board ? board.title : 'текущую доску';
     const isOwner = board && activeUser && activeUser.username === board.owner_username;
-    
+
     let payload = {};
     if (isOwner) {
-        const newOwner = prompt("Вы являетесь владельцем доски "${boardTitle}". Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:");
+        const newOwner = prompt(`Вы являетесь владельцем доски "${boardTitle}". Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:`);
         if (!newOwner) return;
         payload.new_owner = newOwner.trim();
     } else {
@@ -1421,6 +1418,11 @@ async function leaveCurrentBoard() {
         alert(err.detail || 'Ошибка при выходе из доски');
     }
 }
+
+
+
+
+
 
 
 
@@ -1709,7 +1711,6 @@ window.openModalForArchived = function(task) {
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
 
     document.getElementById('modal-comments-section').style.display = 'none';
-    document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
     const commentsList = document.getElementById('task-comments-list');
     if (commentsList) commentsList.innerHTML = '';
@@ -1812,19 +1813,12 @@ async function openTaskFromChat(taskId) {
 // 6. Логика панели комментариев
 function toggleTaskComments() {
     const panel = document.getElementById('modal-comments-section');
-    const tab = document.getElementById('comments-sidebar-tab');
 
     if (panel.style.display === 'none') {
-        tab.style.opacity = '0';
-        tab.style.pointerEvents = 'none';
-        setTimeout(() => { tab.style.left = '-352px'; }, 200);
         panel.style.display = 'flex';
         scrollToTaskCommentsBottom();
     } else {
         panel.style.display = 'none';
-        tab.style.left = '-32px';
-        tab.style.opacity = '1';
-        tab.style.pointerEvents = 'auto';
     }
 }
 
@@ -1980,7 +1974,6 @@ window.openModalForBacklog = function (task) {
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
 
     document.getElementById('modal-comments-section').style.display = 'none';
-    document.getElementById('comments-sidebar-tab').style.left = '-32px';
 
     const commentsList = document.getElementById('task-comments-list');
     if (commentsList) commentsList.innerHTML = '';
