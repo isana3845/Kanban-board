@@ -16,6 +16,18 @@ let searchTimeout = null;
 let activeTaskCheckpoints = [];
 let isDraggingTask = false;
 
+//  НАСТРОЙКИ SORTABLE
+Sortable.defaults = {
+    animation: 0,                  // Убираем анимацию перемещения
+    delay: 0,                      // убираем задержку перед стартом
+    delayOnTouchOnly: false,       // Отключаем задержку на тач-устройствах
+    touchStartThreshold: 0,        // Минимальное смещение для старта = 0
+    forceFallback: true,           // Принудительно используем fallback
+    fallbackTolerance: 0,          // Убираем допуск
+    ghostClass: 'sortable-ghost',  // Класс для элемента-призрака
+    dragClass: 'sortable-drag',    // Класс для перетаскиваемого элемента
+};
+
 // Переменные для прикрепленной к чату задачи
 let linkedChatTaskId = null;
 let linkedChatTaskTitle = null;
@@ -2386,105 +2398,3 @@ window.updateCharCounter = function() {
         counterSpan.style.color = ''; // Возвращаем стандартный цвет, если текст стерли
     }
 };
-
-// скролл. колонки подстраиваем под длину большей
-function equalizeColumnsHeight() {
-    if (!document.body.classList.contains('global-scroll-mode')) return;
-    
-    const columns = document.querySelectorAll('.column');
-    if (columns.length === 0) return;
-    
-    // Сбрасываем высоту
-    columns.forEach(col => {
-        col.style.height = 'auto';
-        col.style.minHeight = 'auto';
-    });
-    
-    // Даём браузеру время пересчитать layout
-    requestAnimationFrame(() => {
-        let maxHeight = 0;
-        columns.forEach(col => {
-            const height = col.scrollHeight;
-            if (height > maxHeight) maxHeight = height;
-        });
-        
-        const minHeight = 200;
-        if (maxHeight < minHeight) maxHeight = minHeight;
-        
-        columns.forEach(col => {
-            col.style.height = maxHeight + 'px';
-            col.style.minHeight = maxHeight + 'px';
-        });
-    });
-}
-
-// Улучшенная функция вызова с повторными попытками
-function safeEqualizeColumnsHeight(attempts = 3) {
-    if (attempts === 0) return;
-    
-    setTimeout(() => {
-        equalizeColumnsHeight();
-        // Повторяем через 200ms для гарантии
-        if (attempts > 1) {
-            setTimeout(() => {
-                equalizeColumnsHeight();
-                // И ещё раз через 300ms
-                if (attempts > 2) {
-                    setTimeout(equalizeColumnsHeight, 300);
-                }
-            }, 200);
-        }
-    }, 100);
-}
-
-// Заменяем все вызовы на safeEqualizeColumnsHeight
-
-// 1. При загрузке страницы
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => safeEqualizeColumnsHeight(3), 300);
-});
-
-// 2. После переключения режима скролла
-const originalToggleScrollMode = window.toggleScrollMode;
-window.toggleScrollMode = function() {
-    originalToggleScrollMode();
-    safeEqualizeColumnsHeight(3);
-};
-
-// 3. После загрузки задач
-const originalLoadTasks = window.loadTasks || loadTasks;
-if (typeof originalLoadTasks === 'function') {
-    window.loadTasks = async function() {
-        await originalLoadTasks();
-        safeEqualizeColumnsHeight(3);
-    };
-}
-
-// 4. После рендеринга колонок
-const originalRenderColumns = window.renderColumns || renderColumns;
-if (typeof originalRenderColumns === 'function') {
-    window.renderColumns = function() {
-        originalRenderColumns();
-        safeEqualizeColumnsHeight(3);
-    };
-}
-
-// 5. После рендеринга карточек
-const originalRenderBoardCards = window.renderBoardCards || renderBoardCards;
-if (typeof originalRenderBoardCards === 'function') {
-    window.renderBoardCards = function() {
-        originalRenderBoardCards();
-        safeEqualizeColumnsHeight(3);
-    };
-}
-
-// 6. При изменении размера окна
-let resizeTimeout;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => safeEqualizeColumnsHeight(2), 200);
-});
-
-// 7. Для ручного вызова из консоли
-window.equalizeColumnsHeight = equalizeColumnsHeight;
-window.safeEqualizeColumnsHeight = safeEqualizeColumnsHeight;
