@@ -95,6 +95,25 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .column:nth-child(3n+1) { background: linear-gradient(135deg, #fff0f0 0%, #ffe4e4 100%); border-color: #f5c2c2; }
 .column:nth-child(3n+2) { background: linear-gradient(135deg, #eef5ff 0%, #e0edfc 100%); border-color: #c5d9f0; }
 .column:nth-child(3n+3) { background: linear-gradient(135deg, #eef7f0 0%, #e0f0e5 100%); border-color: #c5e0d0; }
+/* шапка колонок (тк в скролле серые) */
+.column:nth-child(3n+1) .column-header { 
+    background: linear-gradient(135deg, #fff0f0 0%, #ffe4e4 100%);
+    border-radius: 12px 12px 0 0;
+    margin: -12px -12px 12px -12px;
+    padding: 12px 12px 8px 12px;
+}
+.column:nth-child(3n+2) .column-header { 
+    background: linear-gradient(135deg, #eef5ff 0%, #e0edfc 100%);
+    border-radius: 12px 12px 0 0;
+    margin: -12px -12px 12px -12px;
+    padding: 12px 12px 8px 12px;
+}
+.column:nth-child(3n+3) .column-header { 
+    background: linear-gradient(135deg, #eef7f0 0%, #e0f0e5 100%);
+    border-radius: 12px 12px 0 0;
+    margin: -12px -12px 12px -12px;
+    padding: 12px 12px 8px 12px;
+}
 .column:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 .cards-dropzone { flex-grow: 1; min-height: 100px; overflow-y: auto; padding-right: 4px; }
 .cards-dropzone::-webkit-scrollbar { width: 4px; }
@@ -338,11 +357,11 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .column:last-child {overflow: visible !important;}
 .column:last-child .wip-menu {left: auto !important; right: 0 !important; transform: none !important;}
 
-body.global-scroll-mode div:has(> .column) {
+/* body.global-scroll-mode div:has(> .column) {
     overflow-y: auto !important;
     height: calc(100vh - 155px) !important;
     align-items: flex-start !important;
-}
+} 
 
 body.global-scroll-mode .column {
     height: auto !important;
@@ -362,6 +381,62 @@ body.global-scroll-mode .column-header {
     z-index: 15;
     padding-top: 4px;
     padding-bottom: 8px;
+}  */
+
+/* СКРОЛЛ */
+body.global-scroll-mode .board-columns {
+    display: flex !important;
+    gap: 20px;
+    align-items: stretch !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 10px 45px 20px 45px;
+    width: 100% !important;
+}
+
+body.global-scroll-mode .column {
+    flex: 1 1 0 !important; 
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100px !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+body.global-scroll-mode .cards-dropzone {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    min-height: 50px !important;
+}
+
+body.global-scroll-mode .column-header {
+    position: sticky !important;
+    top: 0;
+    z-index: 15;
+    flex-shrink: 0 !important;
+}
+
+/* Убираем фиксированную высоту у родителей */
+body.global-scroll-mode .board-columns-wrapper {
+    height: auto !important;
+    min-height: auto !important;
+    flex-grow: 0 !important;
+}
+
+body.global-scroll-mode .view-container {
+    height: auto !important;
+    min-height: auto !important;
+}
+
+body.global-scroll-mode .board-content {
+    height: auto !important;
+    min-height: auto !important;
+}
+
+/* фиксированная высота панелей */
+body.global-scroll-mode .side-dropzone {
+    height: 100vh;
+    flex-grow: 1;
 }
 
 .column:hover,

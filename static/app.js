@@ -286,6 +286,8 @@ async function createNewColumn() {
     
     const colId = 'col_' + Date.now();
     activeBoardData.columns.push({ id: colId, name: name.trim(), wip_limit: 0, archived: false });
+
+    activeBoardData.columns_data = JSON.stringify(activeBoardData.columns);
     
     await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Создал(а) новую колонку '${name.trim()}'`}) });
     await syncBoardSettingsToServer();
@@ -589,9 +591,27 @@ function clearTaskPreview() {
 
 // --- ДОСКИ ---
 async function loadBoards() {
-    const res = await fetch('/api/boards');
-    currentBoards = await res.json();
-    renderFolders();
+    try {
+        const res = await fetch('/api/boards');
+        if (!res.ok) {
+            if (res.status === 401) {
+                // Если не авторизован - показываем логин
+                showLogin();
+                return;
+            }
+            console.error('Ошибка загрузки досок:', res.status);
+            currentBoards = [];
+            renderFolders();
+            return;
+        }
+        const data = await res.json();
+        currentBoards = Array.isArray(data) ? data : [];
+        renderFolders();
+    } catch (err) {
+        console.error('Ошибка загрузки досок:', err);
+        currentBoards = [];
+        renderFolders();
+    }
 }
 
 function renderFolders() {
@@ -2366,3 +2386,105 @@ window.updateCharCounter = function() {
         counterSpan.style.color = ''; // Возвращаем стандартный цвет, если текст стерли
     }
 };
+
+// скролл. колонки подстраиваем под длину большей
+function equalizeColumnsHeight() {
+    if (!document.body.classList.contains('global-scroll-mode')) return;
+    
+    const columns = document.querySelectorAll('.column');
+    if (columns.length === 0) return;
+    
+    // Сбрасываем высоту
+    columns.forEach(col => {
+        col.style.height = 'auto';
+        col.style.minHeight = 'auto';
+    });
+    
+    // Даём браузеру время пересчитать layout
+    requestAnimationFrame(() => {
+        let maxHeight = 0;
+        columns.forEach(col => {
+            const height = col.scrollHeight;
+            if (height > maxHeight) maxHeight = height;
+        });
+        
+        const minHeight = 200;
+        if (maxHeight < minHeight) maxHeight = minHeight;
+        
+        columns.forEach(col => {
+            col.style.height = maxHeight + 'px';
+            col.style.minHeight = maxHeight + 'px';
+        });
+    });
+}
+
+// Улучшенная функция вызова с повторными попытками
+function safeEqualizeColumnsHeight(attempts = 3) {
+    if (attempts === 0) return;
+    
+    setTimeout(() => {
+        equalizeColumnsHeight();
+        // Повторяем через 200ms для гарантии
+        if (attempts > 1) {
+            setTimeout(() => {
+                equalizeColumnsHeight();
+                // И ещё раз через 300ms
+                if (attempts > 2) {
+                    setTimeout(equalizeColumnsHeight, 300);
+                }
+            }, 200);
+        }
+    }, 100);
+}
+
+// Заменяем все вызовы на safeEqualizeColumnsHeight
+
+// 1. При загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => safeEqualizeColumnsHeight(3), 300);
+});
+
+// 2. После переключения режима скролла
+const originalToggleScrollMode = window.toggleScrollMode;
+window.toggleScrollMode = function() {
+    originalToggleScrollMode();
+    safeEqualizeColumnsHeight(3);
+};
+
+// 3. После загрузки задач
+const originalLoadTasks = window.loadTasks || loadTasks;
+if (typeof originalLoadTasks === 'function') {
+    window.loadTasks = async function() {
+        await originalLoadTasks();
+        safeEqualizeColumnsHeight(3);
+    };
+}
+
+// 4. После рендеринга колонок
+const originalRenderColumns = window.renderColumns || renderColumns;
+if (typeof originalRenderColumns === 'function') {
+    window.renderColumns = function() {
+        originalRenderColumns();
+        safeEqualizeColumnsHeight(3);
+    };
+}
+
+// 5. После рендеринга карточек
+const originalRenderBoardCards = window.renderBoardCards || renderBoardCards;
+if (typeof originalRenderBoardCards === 'function') {
+    window.renderBoardCards = function() {
+        originalRenderBoardCards();
+        safeEqualizeColumnsHeight(3);
+    };
+}
+
+// 6. При изменении размера окна
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => safeEqualizeColumnsHeight(2), 200);
+});
+
+// 7. Для ручного вызова из консоли
+window.equalizeColumnsHeight = equalizeColumnsHeight;
+window.safeEqualizeColumnsHeight = safeEqualizeColumnsHeight;
