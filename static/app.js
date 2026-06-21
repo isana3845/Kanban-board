@@ -493,7 +493,9 @@ function switchView(view) {
     const noMsg = document.getElementById('user-no-board-msg');
     if (actions) actions.style.display = hasBoard ? 'block' : 'none';
     if (noMsg) noMsg.style.display = hasBoard ? 'none' : 'block';
-    
+
+    if (!hasBoard) updateProjectProgress();
+
     if (view === 'folders') loadBoards();
     if (view === 'analytics' && activeBoardId) loadLogs();
 }
@@ -504,11 +506,11 @@ function switchView(view) {
 function toggleChat() {
     const chat = document.getElementById('chat-sidebar');
     const viewContainer = document.querySelector('.view-container');
-    
+
     if (chat.parentElement !== viewContainer) {
         viewContainer.appendChild(chat);
     }
-    
+
     chat.style.display = chat.style.display === 'none' ? 'flex' : 'none';
     if (chat.style.display === 'flex') scrollToChatBottom();
 }
@@ -526,7 +528,7 @@ function appendMessageToChat(msg) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'chat-msg';
-    
+
     let linkedHtml = '';
     if (msg.linked_task_id) {
         // Изменено: вызывается openTaskFromChat вместо openModalForEdit
@@ -536,7 +538,7 @@ function appendMessageToChat(msg) {
             </div>
         `;
     }
-    
+
     div.innerHTML = `
         <div class="chat-msg-author">${msg.username}</div>
         ${linkedHtml}
@@ -555,14 +557,14 @@ function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const content = input.value.trim();
     if (!content && !linkedChatTaskId) return;
-    
+
     const payload = {
         type: 'chat',
         content: content,
         linked_task_id: linkedChatTaskId,
         linked_task_title: linkedChatTaskTitle
     };
-    
+
     if (boardSocket && boardSocket.readyState === WebSocket.OPEN) {
         boardSocket.send(JSON.stringify(payload));
         input.value = '';
@@ -574,23 +576,23 @@ function sendChatMessage() {
 // Функция связывания задачи с чатом
 function linkTaskToChat() {
     if (!currentOpenedTask) return;
-    
+
     linkedChatTaskId = currentOpenedTask.id;
     linkedChatTaskTitle = currentOpenedTask.title;
-    
+
     document.getElementById('chat-preview-title').innerText = 'Связь: ' + currentOpenedTask.title;
     document.getElementById('chat-task-preview').style.display = 'flex';
-    
+
     closeModal();
-    
+
     const chat = document.getElementById('chat-sidebar');
     const viewContainer = document.querySelector('.view-container');
-    
+
     // Динамическое перемещение чата в глобальный контейнер, чтобы он отображался поверх архива
     if (chat.parentElement !== viewContainer) {
         viewContainer.appendChild(chat);
     }
-    
+
     if (chat.style.display === 'none') {
         chat.style.display = 'flex';
         scrollToChatBottom();
@@ -615,22 +617,22 @@ function renderFolders() {
     const grid = document.getElementById('folders-grid-container');
     if (!grid) return;
     grid.innerHTML = '';
-    
+
     currentBoards.forEach(b => {
         const d = document.createElement('div');
         d.className = 'folder-item';
-        
+
         // Если папка активна, просто добавляем класс CSS
         if (activeBoardId === b.id) {
             d.classList.add('active');
         }
-        
+
         // Рендерим чистую структуру без инлайновых стилей
         d.innerHTML = `
             <div class="folder-icon"></div>
             <div class="folder-name">${b.title}</div>
         `;
-        
+
         d.onclick = () => selectBoard(b);
         grid.appendChild(d);
     });
@@ -648,11 +650,11 @@ async function promptCreateBoard() {
 
 function selectBoard(board) {
     if (isGuest) return showLogin();
-    
+
     activeBoardId = board.id;
     activeBoardData = board;
     document.getElementById('main-board-title').innerText = board.title;
-    
+
     const editBtn = document.getElementById('edit-board-title-btn');
     if (editBtn) editBtn.style.display = 'block';
 
@@ -665,14 +667,14 @@ function selectBoard(board) {
     } catch(e) {
         activeBoardData.columns = [];
     }
-    
+
     document.getElementById('board-wip-toggle').checked = !!board.wip_enabled;
     document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
-    
+
     if (window.applyScrollModeSetting) {
         window.applyScrollModeSetting();
     }
-    
+
     applyDropzonesVisibility();
 
     switchView('board');
@@ -686,7 +688,7 @@ function selectBoard(board) {
     }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     boardSocket = new WebSocket(`${protocol}//${window.location.host}/ws/boards/${board.id}`);
-    
+
     boardSocket.onmessage = async function(event) {
         const data = JSON.parse(event.data);
         if (data.type === 'update') {
@@ -708,7 +710,7 @@ function selectBoard(board) {
                     }
                     document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
                     renderColumns();
-                    updateWipIndicators(); 
+                    updateWipIndicators();
                 }
             }
             loadTasks();
@@ -732,11 +734,11 @@ function selectBoard(board) {
 // Возврат из меню Хаба при повторном клике на иконку
 document.getElementById('menu-to-analytics').onclick = () => {
     if (!activeBoardId) return alert('Выберите доску в меню папок.');
-    
+
     document.getElementById('analytics-logs-view').style.display = 'none';
     document.getElementById('analytics-archive-view').style.display = 'none';
     document.querySelector('#view-analytics .folders-grid').style.display = 'grid';
-    
+
     switchView('analytics');
 };
 
@@ -750,22 +752,22 @@ async function loadMembers() {
 function renderMembers(members) {
     const list = document.getElementById('connected-members-list');
     list.innerHTML = '';
-    
+
     members.forEach(m => {
         const li = document.createElement('li');
         li.className = 'member-item';
-        
+
         // Определение статусов пользователя
         const isMe = m.username === activeUser.username;
         const isOwner = activeBoardData && m.username === activeBoardData.owner_username;
-        
+
         let badges = '';
         if (isOwner) badges += ' <span style="color: gray; font-size: 13px;">(Владелец)</span>';
         if (isMe) badges += ' <span style="color: gray; font-size: 13px;">(Вы)</span>';
-        
+
         // Крестик удаления (X) рендерится только в том случае, если пользователь НЕ является владельцем доски
         const deleteBtnHtml = !isOwner ? `<button onclick="removeMember('${m.username}')">&times;</button>` : '';
-        
+
         li.innerHTML = `
             <span>${m.username}${badges}</span>
             ${deleteBtnHtml}
@@ -778,43 +780,43 @@ function renderMembers(members) {
 function renderBoardMembers(members) {
     const container = document.getElementById('board-members-list');
     if (!container) return;
-    
+
     // Очистка контейнера перед повторным рендерингом
     container.innerHTML = '';
-    
+
     members.forEach(member => {
         // Проверка прав текущего элемента списка
         const isOwner = activeBoardData && member === activeBoardData.owner_username;
         const isMe = activeUser && member === activeUser.username;
-        
+
         // Создание элемента интерфейса для участника
         const item = document.createElement('div');
         item.className = 'member-item';
         item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 4px 0;';
-        
+
         // Формирование текстовой подписи с суффиксами статуса
         let badges = '';
         if (isOwner) badges += ' <span style="color: gray; font-size: 13px; font-style: italic;">(Владелец)</span>';
         if (isMe) badges += ' <span style="color: gray; font-size: 13px; font-style: italic;">(Вы)</span>';
-        
+
         const nameSpan = document.createElement('span');
         nameSpan.innerHTML = `${member}${badges}`;
         item.appendChild(nameSpan);
-        
+
         // Кнопка удаления (крестик) добавляется для всех, кроме владельца доски
         if (!isOwner) {
             const cross = document.createElement('span');
             cross.innerText = '✖';
             cross.style.cssText = 'color: red; cursor: pointer; margin-left: 8px; font-weight: bold; font-size: 14px;';
-            
+
             cross.onclick = async () => {
                 if (!confirm(`Удалить пользователя ${member} из участников доски?`)) return;
-                
+
                 try {
                     const res = await fetch(`/api/boards/${activeBoardId}/members/${member}`, {
                         method: 'DELETE'
                     });
-                    
+
                     if (res.ok) {
                         item.remove();
                         // Если текущий пользователь удалил самого себя, страница перезагружается для применения ограничений доступа
@@ -830,10 +832,10 @@ function renderBoardMembers(members) {
                     alert('Произошла сетевая ошибка при удалении участника');
                 }
             };
-            
+
             item.appendChild(cross);
         }
-        
+
         container.appendChild(item);
     });
 }
@@ -842,7 +844,7 @@ async function addMember() {
     const input = document.getElementById('new-member-name');
     const username = input.value.trim();
     if (!username || !activeBoardId) return;
-    
+
     const res = await fetch(`/api/boards/${activeBoardId}/members`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username })
     });
@@ -890,10 +892,10 @@ async function syncWipToServer() {
 async function loadTasks() {
     const res = await fetch(`/api/tasks?board_id=${activeBoardId}`);
     currentTasks = await res.json();
-    
+
     // Обновляем список исполнителей в меню фильтров на основе полученных задач
     updateFilterAssigneesUI();
-    
+
     renderBoardCards();
     updateWipIndicators(); // ДОБАВЛЕНО
 }
@@ -907,7 +909,7 @@ function applySort(method) {
 function renderBoardCards() {
     const zones = {};
     const counts = {};
-    
+
     if (activeBoardData && activeBoardData.columns) {
         activeBoardData.columns.forEach(col => {
             if (!col.archived) {
@@ -928,11 +930,11 @@ function renderBoardCards() {
     if (currentFilters.assignees.length > 0) {
         tasksToRender = tasksToRender.filter(t => currentFilters.assignees.includes(t.assignee));
     }
-    
+
     if (currentFilters.priorities.length > 0) {
         tasksToRender = tasksToRender.filter(t => currentFilters.priorities.includes(t.priority));
     }
-    
+
     if (currentFilters.deadline !== 'all') {
         const limitDays = parseInt(currentFilters.deadline);
         tasksToRender = tasksToRender.filter(t => {
@@ -966,11 +968,11 @@ function renderBoardCards() {
         if (counts[task.status] !== undefined) {
             counts[task.status]++;
         }
-        
+
         const card = document.createElement('div');
         card.className = 'task-card';
         card.dataset.id = task.id;
-        
+
         // Описание задачи (обрезаем для безопасности)
         const description = task.description || '';
         let descriptionHtml = '';
@@ -978,13 +980,13 @@ function renderBoardCards() {
             let shortDesc = description.length > 100 ? description.substring(0, 97) + '...' : description;
             descriptionHtml = `<div class="card-description">${escapeHtml(shortDesc)}</div>`;
         }
-        
+
         let dateHtml = '<span>📅 —</span>';
         if (task.date) {
             const tDate = new Date(task.date);
             const hoursLeft = (tDate - now) / (1000 * 60 * 60);
             const dateStr = tDate.toLocaleString('ru-RU', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
-            
+
             if (hoursLeft <= 24) {
                 dateHtml = `<span style="color: #dc3545;">📅 ${escapeHtml(dateStr)}</span>`;
             } else {
@@ -994,7 +996,7 @@ function renderBoardCards() {
 
         const priorityClass = task.priority === 'Высокая' ? 'high' : (task.priority === 'Средняя' ? 'medium' : 'low');
         const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
-        
+
         card.innerHTML = `
             <div class="card-title">
                 <span class="card-priority ${priorityClass}"></span>
@@ -1009,7 +1011,7 @@ function renderBoardCards() {
                 </div>
             </div>
         `;
-        
+
         card.onclick = () => openModalForEdit(task.id);
         if (zones[task.status]) {
             zones[task.status].appendChild(card);
@@ -1021,7 +1023,7 @@ function renderBoardCards() {
         const countEl = document.getElementById(`count-${status}`);
         if (countEl) {
             countEl.innerText = counts[status];
-            
+
             // Обновление WIP-индикатора
             const indicator = document.getElementById(`wip-indicator-${status}`);
             if (indicator && activeBoardData && activeBoardData.wip_enabled) {
@@ -1029,7 +1031,7 @@ function renderBoardCards() {
                 const limit = col ? col.wip_limit : 0;
                 const current = counts[status];
                 indicator.textContent = `WIP: ${current}/${limit}`;
-                
+
                 indicator.classList.remove('warning', 'danger');
                 if (current >= limit && limit > 0) {
                     indicator.classList.add('danger');
@@ -1037,12 +1039,12 @@ function renderBoardCards() {
                     indicator.classList.add('warning');
                 }
             }
-            
+
             // Использование динамического лимита для текущей архитектуры колонок
             if (activeBoardData && activeBoardData.wip_enabled) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
-                
+
                 if (limit > 0 && counts[status] >= limit) {
                     countEl.classList.add('limit-exceeded');
                 } else {
@@ -1053,6 +1055,144 @@ function renderBoardCards() {
             }
         }
     });
+
+    updateProjectProgress();
+}
+
+// Прогресс проекта: доля задач, находящихся в колонке(ах) "Done", относительно всех задач
+// во включённых в расчёт колонках. Настраивается пользователем через шестерёнку у прогресс-бара:
+// - какие колонки участвуют в расчёте (знаменатель) — по умолчанию все неархивные;
+// - какие колонки считаются "Done" (числитель, можно несколько) — по умолчанию колонка
+//   с названием "Готово"/"Done" (без учёта регистра), а если такой нет — последняя колонка.
+// Считается по полному списку задач доски (currentTasks), без учёта активных фильтров,
+// чтобы включение/выключение фильтров не влияло на показанный процент.
+function getProgressSettings() {
+    if (!activeBoardData || !activeBoardData.columns) {
+        return { includedIds: [], doneIds: [] };
+    }
+
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+
+    let included = null;
+    let done = null;
+    if (activeBoardData.progress_done_columns) {
+        try {
+            const parsed = JSON.parse(activeBoardData.progress_done_columns);
+            included = Array.isArray(parsed.included) ? parsed.included : null;
+            done = Array.isArray(parsed.done) ? parsed.done : null;
+        } catch (e) { /* настройка не задана или повреждена — используем дефолты */ }
+    }
+
+    const activeIds = activeCols.map(c => c.id);
+    const includedIds = included ? included.filter(id => activeIds.includes(id)) : activeIds;
+
+    let doneIds = done ? done.filter(id => activeIds.includes(id)) : null;
+    if (!doneIds || doneIds.length === 0) {
+        const byName = activeCols.find(c => ['готово', 'done'].includes((c.name || '').trim().toLowerCase()));
+        if (byName) {
+            doneIds = [byName.id];
+        } else if (activeCols.length > 0) {
+            doneIds = [activeCols[activeCols.length - 1].id];
+        } else {
+            doneIds = [];
+        }
+    }
+
+    return { includedIds, doneIds };
+}
+
+function updateProjectProgress() {
+    const fill = document.getElementById('board-progress-fill');
+    const label = document.getElementById('board-progress-label');
+    if (!fill || !label) return;
+
+    if (!activeBoardData || !activeBoardData.columns) {
+        fill.style.width = '0%';
+        label.textContent = '0%';
+        return;
+    }
+
+    const { includedIds, doneIds } = getProgressSettings();
+    if (includedIds.length === 0) {
+        fill.style.width = '0%';
+        label.textContent = '0%';
+        return;
+    }
+
+    const includedSet = new Set(includedIds);
+    const doneSet = new Set(doneIds);
+
+    const relevantTasks = currentTasks.filter(t => includedSet.has(t.status));
+    const totalTasks = relevantTasks.length;
+    const doneTasks = relevantTasks.filter(t => doneSet.has(t.status)).length;
+
+    const percent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    fill.style.width = `${percent}%`;
+    label.textContent = `${percent}%`;
+}
+
+// Открывает панель настройки прогресса и заполняет её актуальным списком колонок
+function openProgressSettings(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('progress-settings-dropdown');
+    const opened = dropdown.style.display === 'block';
+
+    document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+    if (opened) return;
+
+    if (!activeBoardData || !activeBoardData.columns) return;
+
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+    const { includedIds, doneIds } = getProgressSettings();
+    const includedSet = new Set(includedIds);
+    const doneSet = new Set(doneIds);
+
+    const includedList = document.getElementById('progress-included-list');
+    const doneList = document.getElementById('progress-done-list');
+
+    includedList.innerHTML = activeCols.map(col => `
+        <label>
+            <input type="checkbox" class="progress-included-checkbox" value="${col.id}" ${includedSet.has(col.id) ? 'checked' : ''}>
+            ${escapeHtml(col.name)}
+        </label>
+    `).join('');
+
+    doneList.innerHTML = activeCols.map(col => `
+        <label>
+            <input type="checkbox" class="progress-done-checkbox" value="${col.id}" ${doneSet.has(col.id) ? 'checked' : ''}>
+            ${escapeHtml(col.name)}
+        </label>
+    `).join('');
+
+    dropdown.style.display = 'block';
+}
+
+// Сохраняет выбранные пользователем колонки расчёта прогресса на сервере
+async function saveProgressSettings() {
+    if (!activeBoardData) return;
+
+    const included = Array.from(document.querySelectorAll('.progress-included-checkbox:checked')).map(cb => cb.value);
+    const done = Array.from(document.querySelectorAll('.progress-done-checkbox:checked')).map(cb => cb.value);
+
+    const progressData = JSON.stringify({ included, done });
+    activeBoardData.progress_done_columns = progressData;
+
+    const payload = {
+        wip_enabled: activeBoardData.wip_enabled ? 1 : 0,
+        dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
+        columns_data: activeBoardData.columns_data || JSON.stringify(activeBoardData.columns),
+        progress_done_columns: progressData
+    };
+
+    await fetch(`/api/boards/${activeBoardId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    document.getElementById('progress-settings-dropdown').style.display = 'none';
+    updateProjectProgress();
 }
 
 

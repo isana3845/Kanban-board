@@ -47,7 +47,24 @@
                     <button id="edit-board-title-btn" onclick="renameCurrentBoard()" class="edit-board-btn" title="Переименовать доску">✏️</button>
                 </div>
                 <div class="header-actions">
-                    
+
+                    <div class="progress-container control-wrapper" id="board-progress-container" title="Прогресс проекта">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="board-progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <span class="progress-bar-label" id="board-progress-label">0%</span>
+                        <button type="button" class="progress-settings-btn" id="progress-settings-btn" title="Настроить расчёт прогресса" onclick="openProgressSettings(event)">⚙️</button>
+                        <div id="progress-settings-dropdown" class="dropdown-menu progress-settings-dropdown" onclick="event.stopPropagation()">
+                            <div class="wip-title">Учитывать в расчёте задачи из колонок:</div>
+                            <div id="progress-included-list" class="progress-columns-list"></div>
+                            <hr style="margin: 8px 0;">
+                            <div class="wip-title">Колонка(и) "Готово":</div>
+                            <div id="progress-done-list" class="progress-columns-list"></div>
+                            <hr style="margin: 8px 0;">
+                            <button type="button" onclick="saveProgressSettings()" class="btn-apply-rename" style="width:100%;">Сохранить</button>
+                        </div>
+                    </div>
+
                     <div class="search-container">
                         <div class="search-input-box">
                             <input type="text" id="global-search-input" class="search-input" placeholder="Поиск (задачи, логи, чат)...">
