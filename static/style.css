@@ -365,11 +365,12 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 body.global-scroll-mode .board-columns { display: flex !important; gap: 20px; align-items: stretch !important; height: auto !important; min-height: auto !important; margin: 10px 45px 20px 45px; width: 100% !important; }
 body.global-scroll-mode .column { flex: 1 1 0 !important; height: auto !important; max-height: none !important; min-height: 100px !important; display: flex !important; flex-direction: column !important; }
 body.global-scroll-mode .cards-dropzone { flex: 1 !important; overflow-y: auto !important; min-height: 50px !important; }
-body.global-scroll-mode .column-header { position: sticky !important; top: 0; z-index: 15; flex-shrink: 0 !important; }
+body.global-scroll-mode .column-header { position: sticky !important; top: 0; z-index: 15; flex-shrink: 0 !important; background: inherit !important; border-radius: 12px 12px 0 0 !important; margin: -12px -12px 12px -12px !important; padding: 12px 12px 8px 12px !important; }
 body.global-scroll-mode .board-columns-wrapper { height: auto !important; min-height: auto !important; flex-grow: 0 !important; }
-body.global-scroll-mode .view-container { height: auto !important; min-height: auto !important; }
-body.global-scroll-mode .board-content { height: auto !important; min-height: auto !important; }
+body.global-scroll-mode .view-container { overflow-y: auto !important; height: calc(100vh - 85px) !important; max-height: calc(100vh - 85px) !important; }
+body.global-scroll-mode .board-content { height: auto !important; min-height: 100% !important; padding-bottom: 20px !important; }
 body.global-scroll-mode .side-dropzone { height: 100vh; flex-grow: 1; }
+body.global-scroll-mode .column .cards-dropzone { overflow-y: visible !important; }
 
 .column:hover, .column:focus-within, .column:has(.wip-menu:not([style*="display: none"])) { z-index: 15 !important; }
 
@@ -430,7 +431,7 @@ button[onclick*="clearArchive"]:hover { background: #cc6a7a !important; border-c
 body.mentor-mode .toolbar > .chat-toggle-btn {display: none !important;}
 
 /* для наставника при общем скролле */
-body.global-scroll-mode .mentor-footer {position: sticky; bottom: 20px; margin-top: auto; background: #faf5ff; border-radius: 12px 12px 0 0; z-index: 9999;padding: 8px 20px 8px 0; border-top: 1px solid #e8d5f0;}
+body.global-scroll-mode .mentor-footer { position: sticky !important; bottom: 0 !important; margin-top: auto !important; background: #faf5ff !important; z-index: 20 !important; padding: 8px 20px 8px 0 !important; border-top: 1px solid #e8d5f0 !important; }
 body.global-scroll-mode .board-content {padding-bottom: 0;}
 body.global-scroll-mode .board-columns-wrapper {flex: 1; min-height: 0;}
 body.global-scroll-mode .board-columns {height: auto !important; min-height: 300px !important;}
