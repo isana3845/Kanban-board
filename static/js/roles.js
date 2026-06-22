@@ -38,7 +38,6 @@ function applyRoleRestrictions() {
     const mentor = isMentor();
     document.body.classList.toggle('mentor-mode', mentor);
 
-    
     const toggleDisplay = (selector, hide) => {
         document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
     };
@@ -64,12 +63,24 @@ function applyRoleRestrictions() {
         el.style.display = mentor ? 'none' : '';
     });
 
+
     document.querySelectorAll(SELECTORS.taskCards).forEach(el => {
         el.style.cursor = dragState.cursor;
         el.draggable    = dragState.draggable;
+        
+        if (!el._clickHandler) {
+            const taskId = el.dataset.id;
+            if (taskId) {
+                el._clickHandler = (e) => {
+                    e.stopPropagation();
+                    window.openModalForEdit(parseInt(taskId));
+                };
+                el.addEventListener('click', el._clickHandler);
+            }
+        }
     });
 
-
+    // Обновляем Sortable
     if (columnSortable) {
         columnSortable.option('disabled', dragState.disabled);
     }
@@ -79,8 +90,6 @@ function applyRoleRestrictions() {
             el.sortableInstance.option('disabled', dragState.disabled);
         }
     });
-
-    renderBoardCards();
 }
 
 // ── Ограничения для модального окна ─────────────────────────────────────────
@@ -116,18 +125,40 @@ function applyModalRestrictions() {
 
 // ── Обёртки для функций, открывающих модалки ─────────────────────────────────
 
-function wrapModalFunction(originalFn, applyRestrictions) {
-    return function (...args) {
-        const result = originalFn?.apply(this, args);
-        setTimeout(applyRestrictions, 50);
-        return result;
-    };
-}
+// Сохраняем оригинальные функции ДО переопределения
+const _originalOpenModalForEdit = window.openModalForEdit;
+const _originalOpenModalForCreate = window.openModalForCreate;
+const _originalOpenModalForArchived = window.openModalForArchived;
+const _originalOpenModalForBacklog = window.openModalForBacklog;
 
-window.openModalForEdit     = wrapModalFunction(window.openModalForEdit,     applyModalRestrictions);
-window.openModalForCreate   = wrapModalFunction(window.openModalForCreate,   applyModalRestrictions);
-window.openModalForArchived = wrapModalFunction(window.openModalForArchived, applyModalRestrictions);
-window.openModalForBacklog  = wrapModalFunction(window.openModalForBacklog,  applyModalRestrictions);
+// Переопределяем с сохранением оригинального поведения
+window.openModalForEdit = function (...args) {
+    const result = _originalOpenModalForEdit?.apply(this, args);
+    setTimeout(applyModalRestrictions, 50);
+    return result;
+};
+
+window.openModalForCreate = function (...args) {
+    if (isMentor()) {
+        alert('Наставник не может создавать задачи');
+        return;
+    }
+    const result = _originalOpenModalForCreate?.apply(this, args);
+    setTimeout(applyModalRestrictions, 50);
+    return result;
+};
+
+window.openModalForArchived = function (...args) {
+    const result = _originalOpenModalForArchived?.apply(this, args);
+    setTimeout(applyModalRestrictions, 50);
+    return result;
+};
+
+window.openModalForBacklog = function (...args) {
+    const result = _originalOpenModalForBacklog?.apply(this, args);
+    setTimeout(applyModalRestrictions, 50);
+    return result;
+};
 
 // ── Сброс ограничений при закрытии модалки ───────────────────────────────────
 
@@ -211,11 +242,5 @@ window.selectBoard = function (board) {
 const originalRenderColumns = window.renderColumns;
 window.renderColumns = function () {
     originalRenderColumns?.();
-    setTimeout(applyRoleRestrictions, 50);
-};
-
-const originalRenderBoardCards = window.renderBoardCards;
-window.renderBoardCards = function () {
-    originalRenderBoardCards?.();
     setTimeout(applyRoleRestrictions, 50);
 };
