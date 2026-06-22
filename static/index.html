@@ -14,6 +14,10 @@
         <div class="auth-box">
             <h2>Вход в систему</h2>
             <input type="text" id="auth-username" placeholder="Ваш логин" onkeydown="if(event.key==='Enter') loginUser()">
+            <div class="auth-role-buttons">
+                <button class="role-btn" id="role-student-btn" onclick="selectRole('student')">Студент</button>
+                <button class="role-btn" id="role-mentor-btn" onclick="selectRole('mentor')">Наставник</button>
+            </div>
             <button onclick="loginUser()">Войти</button>
         </div>
     </div>
@@ -46,7 +50,24 @@
                     <button id="edit-board-title-btn" onclick="renameCurrentBoard()" class="edit-board-btn" title="Переименовать доску">✏️</button>
                 </div>
                 <div class="header-actions">
-                    
+
+                    <div class="progress-container control-wrapper" id="board-progress-container" title="Прогресс проекта">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="board-progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <span class="progress-bar-label" id="board-progress-label">0%</span>
+                        <button type="button" class="progress-settings-btn" id="progress-settings-btn" title="Настроить расчёт прогресса" onclick="openProgressSettings(event)">⚙️</button>
+                        <div id="progress-settings-dropdown" class="dropdown-menu progress-settings-dropdown" onclick="event.stopPropagation()">
+                            <div class="wip-title">Учитывать в расчёте задачи из колонок:</div>
+                            <div id="progress-included-list" class="progress-columns-list"></div>
+                            <hr style="margin: 8px 0;">
+                            <div class="wip-title">Колонка(и) "Готово":</div>
+                            <div id="progress-done-list" class="progress-columns-list"></div>
+                            <hr style="margin: 8px 0;">
+                            <button type="button" onclick="saveProgressSettings()" class="btn-apply-rename" style="width:100%;">Сохранить</button>
+                        </div>
+                    </div>
+
                     <div class="search-container">
                         <div class="search-input-box">
                             <input type="text" id="global-search-input" class="search-input" placeholder="Поиск (задачи, логи, чат)...">
@@ -66,12 +87,14 @@
                             </div>
                             
                             <div class="dropdown-menu wide-dropdown" id="user-dropdown">
-                                <div class="dropdown-header"><strong id="user-display-name">---</strong></div>
+                                <div class="dropdown-header"><strong id="user-display-name">---</strong>
+                                <span id="user-role-display" class="dropdown-role"></span>
+                            </div>
                                 <hr>
                                 <div id="user-board-actions" style="display: none;">
                                     <div class="add-member-form">
                                         <input type="text" id="new-member-name" placeholder="Логин пользователя">
-                                        <button onclick="addMember()">Добавить</button>
+                                        <button onclick="addMember()">Добавить на доску</button>
                                     </div>
                                     <hr>
                                     <div class="members-section-title">Участники доски:</div>
@@ -93,15 +116,15 @@
 
 
             <div class="view-container">
-                
+
                 <main class="board-content" id="view-kanban" style="display: none;">
-                    
+
                     <div class="toolbar">
                         <div class="toolbar-buttons">
                             <button class="chat-toggle-btn" onclick="toggleColumnMenu('filter-sort-dropdown', event)">Управление задачами 🔽</button>
                             <button class="chat-toggle-btn" onclick="createNewColumn()">+ Новая колонка</button>
                             <button class="chat-toggle-btn" onclick="openModalForCreate()">+ Новая задача</button>
-                            
+
                             <div class="dropdown-menu filter-sort-dropdown" id="filter-sort-dropdown" onclick="event.stopPropagation()">
                                 <div class="filter-sort-content">
                                     <div class="wip-title">Сортировка:</div>
@@ -131,7 +154,7 @@
                                         <option value="7">Ближайшая неделя</option>
                                         <option value="14">Ближайшие 2 недели</option>
                                     </select>
-                                    
+
                                     <div class="filter-actions">
                                         <button onclick="clearFilters()" class="filter-clear-btn">Сбросить</button>
                                         <button onclick="applyFilters()" class="filter-apply-btn">Применить</button>
@@ -147,12 +170,13 @@
                         <div id="dropzone-backlog" class="side-dropzone side-dropzone-left" data-target="backlog">
                             <div class="dropzone-icon">☰</div>
                         </div>
-                        
                         <div class="board-columns"></div>
-                        
                         <div id="dropzone-archive" class="side-dropzone side-dropzone-right" data-target="archive">
                             <div class="dropzone-icon">☰</div>
                         </div>
+                    </div>
+                     <div class="mentor-footer" id="mentor-footer" style="display: none;">
+                        <button class="chat-toggle-btn mentor-chat-btn" onclick="toggleChat()">💬 Чат доски</button>
                     </div>
 
                     <aside id="chat-sidebar" class="chat-sidebar" style="display: none;">
@@ -225,17 +249,6 @@
 
                 <main class="folders-content" id="view-settings" style="display: none;">
                     <h2>Настройки доски</h2>
-                    
-                    <!-- <div class="settings-card">
-                        <div class="wip-toggle-box">
-                            <label>
-                                <input type="checkbox" id="board-wip-toggle" onchange="toggleBoardWip()"> 
-                                Включить WIP лимиты
-                            </label>
-                        </div>
-                        <p class="settings-hint">Активация лимитов колонок для текущей доски.</p>
-                    </div> -->
-                        
                     <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
@@ -245,7 +258,7 @@
                         </div>
                         <p class="settings-hint">Активация зон быстрого переноса для текущей доски.</p>
                     </div>
-                    
+
                     <div class="settings-card">
                         <div class="wip-toggle-box">
                             <label>
@@ -260,7 +273,6 @@
                         <h2>Обратная связь</h2>
                         <a href="https://forms.yandex.ru/u/6a24fddbf47e7336edd5943d" target="_blank" class="feedback-btn">Оставить отзыв</a>
                     </div>
-                
                 </main>
             </div>
         </div>
@@ -274,7 +286,6 @@
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
             </div>
-            
             <div id="modal-comments-section" class="comments-side-panel" style="display: none;">
                 <div class="comments-header">Комментарии задачи</div>
                 <div class="chat-messages comments-list" id="task-comments-list"></div>
@@ -286,7 +297,7 @@
 
             <button class="modal-link-btn" id="modal-link-task-btn" onclick="linkTaskToChat()" title="Обсудить в чате" style="display: none;">↪️ В чат</button>
             <button class="modal-close" onclick="closeModal()">&times;</button>
-            
+
             <div class="modal-body">
                 <input type="text" id="modal-title" class="editable-title" placeholder="Заголовок" maxlength="100">
                 
@@ -296,12 +307,10 @@
                         <select id="modal-status-select"></select>
                     </div>
                     <div class="meta-value" id="modal-location" style="display:none;"></div>
-                    
                     <div class="meta-label">Исполнитель</div>
                     <div class="meta-value flex-align">
                         <span class="avatar-dot"></span><input type="text" id="modal-assignee">
                     </div>
-                    
                     <div class="meta-label">Дата начала</div>
                     <div class="meta-value flex-align">
                         <input type="date" id="modal-start-date">
@@ -313,7 +322,6 @@
                         <input type="date" id="modal-date">
                         <input type="time" id="modal-time" value="00:00">
                     </div>
-                    
                     <div class="meta-label">Важность</div>
                     <div class="meta-value flex-align">
                         <select id="modal-priority">
@@ -324,7 +332,6 @@
                     </div>
                 </div>
 
-                
                 <textarea id="modal-description" class="description-field" maxlength="3000" placeholder="Добавить описание"></textarea>
                 <div id="char-counter-container" style="text-align: right; font-size: 12px; color: #555; margin-top: 5px;">
                     <span id="char-counter" style="font-weight: bold;">3000</span>
@@ -340,7 +347,7 @@
                 </div>
 
                 <div class="mock-logs" id="modal-logs"></div>
-                
+
                 <div class="modal-save-panel">
                     <div class="modal-actions">
                         <div class="modal-restore-wrapper">
@@ -348,8 +355,8 @@
                             <div id="board-column-select" class="dropdown-menu column-select-dropdown"></div>
                         </div>
                         <button class="btn-backlog" id="btn-to-backlog" onclick="sendCurrentTaskToBacklog()">В бэклог</button>
+                        <button class="btn-delete-task" id="btn-delete-task" onclick="deleteCurrentTask()" style="display:none;">Удалить</button>
                         <button class="btn-archive" id="btn-to-archive" onclick="archiveCurrentTask()">В архив</button>
-                        <button class="btn-delete" id="btn-delete-task" onclick="deleteCurrentTask()" title="Удалить задачу навсегда">Удалить</button>
                     </div>
                     <button class="btn-save" onclick="saveTask()">Сохранить</button>
                 </div>
@@ -357,7 +364,6 @@
         </div>
     </div>
 
-    
     <div class="modal-backdrop" id="col-archive-modal" style="display:none;">
         <div class="col-archive-modal-container">
             <div class="column archive-column-modal">
@@ -373,6 +379,22 @@
     </div>
 
     <div id="drag-tooltip" class="drag-tooltip" style="display: none;"></div>
-    <script src="/app.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/boards.js"></script>
+    <script src="js/columns.js"></script>
+    <script src="js/checkpoints.js"></script>
+    <script src="js/tasks.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/comments.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/members.js"></script>
+    <script src="js/analytics.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/dropzones.js"></script>
+    <script src="js/roles.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
