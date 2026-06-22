@@ -10,7 +10,7 @@ const SELECTORS = {
     createButtons:  '.btn-create-board, .chat-toggle-btn[onclick*="createNewColumn"], .chat-toggle-btn[onclick*="openModalForCreate"], .chat-toggle-btn[onclick*="toggleColumnMenu"]',
     columnControls: '.column-controls button, .drag-handle',
     sideDropzones:  '.side-dropzone',
-    modalButtons:   '#btn-to-archive, #btn-to-backlog, .btn-save',
+    modalButtons:   '#btn-to-archive, #btn-to-backlog, #btn-restore-board, .btn-save',
     archiveButtons: '.archive-modal-delete, .archive-modal-restore, button[onclick*="clearArchive"]',
     backlogCreate:  '.backlog-create-btn',
     memberControls: '#new-member-name, button[onclick*="addMember"], .member-item button',
@@ -38,6 +38,7 @@ function applyRoleRestrictions() {
     const mentor = isMentor();
     document.body.classList.toggle('mentor-mode', mentor);
 
+    
     const toggleDisplay = (selector, hide) => {
         document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
     };
@@ -68,8 +69,16 @@ function applyRoleRestrictions() {
         el.draggable    = dragState.draggable;
     });
 
-    [columnSortable, ...document.querySelectorAll(SELECTORS.cardsDropzones).map(el => el.sortableInstance)]
-        .forEach(instance => { if (instance) instance.option('disabled', dragState.disabled); });
+
+    if (columnSortable) {
+        columnSortable.option('disabled', dragState.disabled);
+    }
+    
+    document.querySelectorAll(SELECTORS.cardsDropzones).forEach(el => {
+        if (el.sortableInstance) {
+            el.sortableInstance.option('disabled', dragState.disabled);
+        }
+    });
 
     renderBoardCards();
 }
@@ -90,14 +99,6 @@ function applyModalRestrictions() {
     });
 
     document.querySelectorAll(SELECTORS.modalButtons).forEach(el => el.style.display = mentor ? 'none' : '');
-
-    // btn-restore-board исключена из общего сброса: её видимость зависит от контекста
-    // (доска / архив / бэклог), который выставляется в modal.js и analytics.js.
-    // Для наставника кнопка всегда скрыта, для студента — не трогаем текущее состояние.
-    if (mentor) {
-        const restoreBtn = document.getElementById('btn-restore-board');
-        if (restoreBtn) restoreBtn.style.display = 'none';
-    }
 
     const checkpointsSection = document.querySelector('.checkpoints-section');
     if (checkpointsSection) checkpointsSection.style.display = mentor ? 'none' : '';
