@@ -38,6 +38,7 @@ function applyRoleRestrictions() {
     const mentor = isMentor();
     document.body.classList.toggle('mentor-mode', mentor);
 
+    // Используем forEach вместо map
     const toggleDisplay = (selector, hide) => {
         document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
     };
@@ -68,8 +69,16 @@ function applyRoleRestrictions() {
         el.draggable    = dragState.draggable;
     });
 
-    [columnSortable, ...document.querySelectorAll(SELECTORS.cardsDropzones).map(el => el.sortableInstance)]
-        .forEach(instance => { if (instance) instance.option('disabled', dragState.disabled); });
+    // Исправляем здесь — обрабатываем columnSortable и cardsDropzones
+    if (columnSortable) {
+        columnSortable.option('disabled', dragState.disabled);
+    }
+    
+    document.querySelectorAll(SELECTORS.cardsDropzones).forEach(el => {
+        if (el.sortableInstance) {
+            el.sortableInstance.option('disabled', dragState.disabled);
+        }
+    });
 
     renderBoardCards();
 }
