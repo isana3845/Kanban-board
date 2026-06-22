@@ -10,7 +10,7 @@ const SELECTORS = {
     createButtons:  '.btn-create-board, .chat-toggle-btn[onclick*="createNewColumn"], .chat-toggle-btn[onclick*="openModalForCreate"], .chat-toggle-btn[onclick*="toggleColumnMenu"]',
     columnControls: '.column-controls button, .drag-handle',
     sideDropzones:  '.side-dropzone',
-    modalButtons:   '#btn-to-archive, #btn-to-backlog, #btn-restore-board, .btn-save',
+    modalButtons:   '#btn-to-archive, #btn-to-backlog, .btn-save',
     archiveButtons: '.archive-modal-delete, .archive-modal-restore, button[onclick*="clearArchive"]',
     backlogCreate:  '.backlog-create-btn',
     memberControls: '#new-member-name, button[onclick*="addMember"], .member-item button',
@@ -67,17 +67,6 @@ function applyRoleRestrictions() {
     document.querySelectorAll(SELECTORS.taskCards).forEach(el => {
         el.style.cursor = dragState.cursor;
         el.draggable    = dragState.draggable;
-        
-        if (!el._clickHandler) {
-            const taskId = el.dataset.id;
-            if (taskId) {
-                el._clickHandler = (e) => {
-                    e.stopPropagation();
-                    window.openModalForEdit(parseInt(taskId));
-                };
-                el.addEventListener('click', el._clickHandler);
-            }
-        }
     });
 
     // Обновляем Sortable
@@ -109,6 +98,14 @@ function applyModalRestrictions() {
 
     document.querySelectorAll(SELECTORS.modalButtons).forEach(el => el.style.display = mentor ? 'none' : '');
 
+    // btn-restore-board исключена из общего сброса: её видимость зависит от контекста
+    // (доска / архив / бэклог), который выставляется в modal.js и analytics.js.
+    // Для наставника кнопка всегда скрыта, для студента — не трогаем текущее состояние.
+    if (mentor) {
+        const restoreBtn = document.getElementById('btn-restore-board');
+        if (restoreBtn) restoreBtn.style.display = 'none';
+    }
+
     const checkpointsSection = document.querySelector('.checkpoints-section');
     if (checkpointsSection) checkpointsSection.style.display = mentor ? 'none' : '';
 
@@ -125,6 +122,14 @@ function applyModalRestrictions() {
 
 // ── Обёртки для функций, открывающих модалки ─────────────────────────────────
 
+function wrapModalFunction(originalFn, applyRestrictions) {
+    return function (...args) {
+        const result = originalFn?.apply(this, args);
+        setTimeout(applyRestrictions, 50);
+        return result;
+    };
+}
+
 // Сохраняем оригинальные функции ДО переопределения
 const _originalOpenModalForEdit = window.openModalForEdit;
 const _originalOpenModalForCreate = window.openModalForCreate;
@@ -133,6 +138,12 @@ const _originalOpenModalForBacklog = window.openModalForBacklog;
 
 // Переопределяем с сохранением оригинального поведения
 window.openModalForEdit = function (...args) {
+    if (isMentor()) {
+        // Для наставника — открываем в режиме просмотра
+        const result = _originalOpenModalForEdit?.apply(this, args);
+        setTimeout(applyModalRestrictions, 50);
+        return result;
+    }
     const result = _originalOpenModalForEdit?.apply(this, args);
     setTimeout(applyModalRestrictions, 50);
     return result;
