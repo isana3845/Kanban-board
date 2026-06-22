@@ -12,10 +12,33 @@ let isGuest = true;
 let currentFilters = { assignees: [], priorities: [], deadline: 'all' };
 let columnSortable = null;
 let currentArchivedColId = null;
+let searchTimeout = null;
+let activeTaskCheckpoints = [];
+let isDraggingTask = false;
+let selectedRole = 'student';
+
+//  НАСТРОЙКИ SORTABLE
+Sortable.defaults = {
+    animation: 0,                  // Убираем анимацию перемещения
+    delay: 0,                      // убираем задержку перед стартом
+    delayOnTouchOnly: false,       // Отключаем задержку на тач-устройствах
+    touchStartThreshold: 0,        // Минимальное смещение для старта = 0
+    forceFallback: true,           // Принудительно используем fallback
+    fallbackTolerance: 0,          // Убираем допуск
+    ghostClass: 'sortable-ghost',  // Класс для элемента-призрака
+    dragClass: 'sortable-drag',    // Класс для перетаскиваемого элемента
+};
 
 // Переменные для прикрепленной к чату задачи
 let linkedChatTaskId = null;
 let linkedChatTaskTitle = null;
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 const statusMap = {
     'todo': 'В планах',
@@ -26,7 +49,56 @@ const statusMap = {
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     initListeners();
+    initDropzoneTooltips();
+    selectRole('student');
 });
+
+// Функция обновления WIP-индикаторов (ДОБАВЛЕНО)
+function updateWipIndicators() {
+    if (!activeBoardData || !activeBoardData.columns) return;
+    
+    // Подсчитываем задачи в каждой колонке
+    const counts = {};
+    activeBoardData.columns.forEach(col => {
+        if (!col.archived) counts[col.id] = 0;
+    });
+    
+    currentTasks.forEach(task => {
+        if (counts[task.status] !== undefined) {
+            counts[task.status]++;
+        }
+    });
+    
+    // Обновляем каждый индикатор
+    activeBoardData.columns.forEach(col => {
+        if (col.archived) return;
+        
+        const indicator = document.getElementById(`wip-indicator-${col.id}`);
+        if (indicator) {
+            const current = counts[col.id] || 0;
+            const limit = col.wip_limit || 0;
+            if (limit > 0) {
+                indicator.textContent = `WIP: ${current}/${limit}`;
+                indicator.style.display = 'inline-block';
+                
+                indicator.classList.remove('warning', 'danger');
+                if (current >= limit) {
+                    indicator.classList.add('danger');
+                } else if (current >= limit * 0.8) {
+                    indicator.classList.add('warning');
+                }
+            } else {
+                indicator.style.display = 'none';
+            }
+        }
+        
+        // Обновляем счётчик задач
+        const countEl = document.getElementById(`count-${col.id}`);
+        if (countEl) {
+            countEl.innerText = counts[col.id] || 0;
+        }
+    });
+}
 
 async function checkAuth() {
     try {
@@ -38,6 +110,10 @@ async function checkAuth() {
         
         if (res.ok) {
             const userData = await res.json();
+             if (userData.role) {
+                selectedRole = userData.role;
+                updateUserRoleDisplay(userData.role);
+            }
             handleLogin(userData);
         } else {
             handleGuest();
@@ -54,21 +130,14 @@ function showLogin() {
     document.getElementById('app-content').style.display = 'none';
 }
 
-function handleLogin(userData) {
-    activeUser = userData;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-content').style.display = 'flex';
-    document.getElementById('user-display-name').innerText = userData.username;
-    switchView('folders');
-}
-
 async function loginUser() {
     const username = document.getElementById('auth-username').value.trim();
     if (!username) return;
+
     const res = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username })
-    });
-    if (res.ok) handleLogin(await res.json());
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username, role:selectedRole}
+        )});
+    if (res.ok) { const userData = await res.json(); handleLogin(userData);}
 }
 
 async function logoutUser() {
@@ -79,25 +148,37 @@ async function logoutUser() {
 function handleGuest() {
     activeUser = null;
     isGuest = true;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-content').style.display = 'flex';
-    document.getElementById('header-username-text').innerText = 'Вход';
-    switchView('folders');
+    currentBoards = [];
+
+    const roleDisplay = document.getElementById('user-role-display');
+    if (roleDisplay) roleDisplay.style.display = 'none';
+
+    showLogin();
 }
 
 function handleLogin(userData) {
+    userData.role = selectedRole; //добавляем роль принудительно. ВРЕМЕННО
     activeUser = userData;
     isGuest = false;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-content').style.display = 'flex';
     document.getElementById('user-display-name').innerText = userData.username;
     document.getElementById('header-username-text').innerText = userData.username;
+
+    if (userData.role) {
+        selectedRole = userData.role;
+        updateUserRoleDisplay(userData.role);
+    } else {
+        updateUserRoleDisplay('student');
+    }
+    
     switchView('folders');
 }
 
 
 
 function initListeners() {
+    initSearchListener()
     document.getElementById('menu-to-board').onclick = () => {
         if (activeBoardId) switchView('board');
         else alert('Выберите доску в меню папок.');
@@ -113,34 +194,74 @@ function initListeners() {
             return;
         }
         
-        // Принудительное скрытие внутренних разделов Хаба и возврат к сетке Хаба
         const logsView = document.getElementById('analytics-logs-view');
         const archiveView = document.getElementById('analytics-archive-view');
+        const backlogView = document.getElementById('analytics-backlog-view');
         const foldersGrid = document.querySelector('#view-analytics .folders-grid');
         
         if (logsView) logsView.style.display = 'none';
         if (archiveView) archiveView.style.display = 'none';
+        if (backlogView) backlogView.style.display = 'none';
         if (foldersGrid) foldersGrid.style.display = 'grid';
         
         switchView('analytics');
     };
 
-    // Слушатель для новой панели настроек
     document.getElementById('menu-to-settings').onclick = () => {
         if (activeBoardId) switchView('settings');
         else alert('Выберите доску в меню папок.');
     };
     
+    const descInput = document.getElementById('modal-description');
+    if (descInput) {
+        descInput.addEventListener('input', window.updateCharCounter);
+    }
+
     setupDropdown('avatar-trigger', 'user-dropdown');
     
     document.addEventListener('click', e => {
         if (!e.target.closest('.control-wrapper')) {
-            document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+            document.querySelectorAll('.dropdown-menu').forEach(m => {
+                if (m.id !== 'board-column-select') m.style.display = 'none';
+            });
+        }
+        if (!e.target.closest('#btn-restore-board') && !e.target.closest('#board-column-select')) {
+            const colSelect = document.getElementById('board-column-select');
+            if (colSelect) colSelect.style.display = 'none';
         }
     });
 }
 
+
+async function deleteColumnDirectly(colId) {
+    if (!activeBoardId) return;
+    const col = activeBoardData.columns.find(c => c.id === colId);
+    const colName = col ? col.name : 'колонку';
+    if (!confirm(`Удалить колонку "${colName}" и все задачи в ней?`)) return;
+    // Delete all tasks in column via API if it has tasks
+    const tasksInCol = currentTasks.filter(t => t.status === colId);
+    for (const task of tasksInCol) {
+        await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+    }
+    // Remove column from board data
+    activeBoardData.columns = activeBoardData.columns.filter(c => c.id !== colId);
+    activeBoardData.columns_data = JSON.stringify(activeBoardData.columns);
+    await syncBoardSettingsToServer();
+    await loadTasks();
+}
+
 function renderColumns() {
+    // 1. Запоминаем ID колонки, чьё меню сейчас открыто (исправлен поиск по префиксу menu-wip-)
+    let openMenuColumnId = null;
+    if (activeBoardData && activeBoardData.columns) {
+        activeBoardData.columns.forEach(col => {
+            const menu = document.getElementById(`menu-wip-${col.id}`);
+            if (menu && (menu.style.display === 'block' || menu.classList.contains('show'))) {
+                openMenuColumnId = col.id;
+            }
+        });
+    }
+
     const container = document.querySelector('.board-columns');
     container.innerHTML = '';
     if (!activeBoardData || !activeBoardData.columns) return;
@@ -154,27 +275,28 @@ function renderColumns() {
         colEl.innerHTML = `
             <div class="column-header">
                 <div class="column-info">
-                    <span class="column-name" id="title-${col.id}">${col.name}</span>
+                    <span class="column-name" id="title-${col.id}">${escapeHtml(col.name)}</span>
                     <span class="column-count" id="count-${col.id}">0</span>
+                    ${col.wip_limit > 0 ? `<span class="wip-indicator" id="wip-indicator-${col.id}">WIP: 0/${col.wip_limit}</span>` : ''}
                 </div>
                 <div class="column-controls control-wrapper">
                     <div class="drag-handle" title="Перетащите, чтобы изменить порядок колонок"></div>
-                    <button onclick="openModalForCreate('${col.id}')">+</button>
                     <button onclick="toggleColumnMenu('menu-wip-${col.id}', event)">⋮</button>
                     <div class="dropdown-menu wip-menu" id="menu-wip-${col.id}" onclick="event.stopPropagation()">
                         <div class="wip-title">Название:</div>
                         <div class="wip-name-group">
-                            <input type="text" id="rename-input-${col.id}" value="${col.name}" onclick="this.select()">
-                            <button onclick="syncBoardSettingsToServer()" class="btn-apply-rename">ОК</button>
+                            <input type="text" id="rename-input-${col.id}" value="${col.name}" onclick="this.select()" maxlength="20">
+                            <button onclick="renameColumn('${col.id}')" class="btn-apply-rename">ОК</button>
                         </div>
                         <hr style="margin: 8px 0;">
                         <div class="wip-title">WIP Лимит (0 - нет):</div>
                         <div class="wip-controls wip-limit-group">
                             <input type="number" id="wip-input-${col.id}" value="${col.wip_limit}" min="0" onchange="syncBoardSettingsToServer()" onclick="this.select()">
-                            <button class="btn-wip-math" onclick="changeWip('${col.id}', 1)">+</button>
-                            <button class="btn-wip-math" onclick="changeWip('${col.id}', -1)">-</button>
+                            <button class="btn-wip-math" onclick="event.stopPropagation(); changeWip('${col.id}', 1)">+</button>
+                            <button class="btn-wip-math" onclick="event.stopPropagation(); changeWip('${col.id}', -1)">-</button>
                         </div>
                         <hr style="margin: 8px 0;">
+                        <button onclick="deleteColumnDirectly('${col.id}')" style="width:100%; background:#cc0000; color:white; border:none; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold; margin-bottom:4px;">Удалить колонку</button>
                         <button onclick="archiveColumn('${col.id}')" style="width:100%; background:#cc0000; color:white; border:none; padding:6px; border-radius:2px; cursor:pointer; font-size:11px; font-weight:bold;">В архив колонку</button>
                     </div>
                 </div>
@@ -186,16 +308,30 @@ function renderColumns() {
 
     setupDragAndDrop();
     renderBoardCards(); 
+
+    // 2. После генерации DOM-структуры восстанавливаем открытое меню по правильному ID
+    if (openMenuColumnId) {
+        const menu = document.getElementById(`menu-wip-${openMenuColumnId}`);
+        if (menu) {
+            menu.style.display = 'block';
+        }
+    }
 }
+
 
 async function createNewColumn() {
     if (!activeBoardId) return;
-    const name = prompt('Введите название новой колонки:');
+    let name = prompt('Введите название новой колонки (макс. 20 символов):');
     if (!name || name.trim() === '') return;
+    if (name.trim().length > 20) {
+        alert('Название колонки не может превышать 20 символов. Будут использованы первые 20.');
+        name = name.trim().slice(0, 20);
+    }
     
     const colId = 'col_' + Date.now();
     activeBoardData.columns.push({ id: colId, name: name.trim(), wip_limit: 0, archived: false });
-    
+    activeBoardData.columns_data = JSON.stringify(activeBoardData.columns);
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Создал(а) новую колонку '${name.trim()}'`}) });
     await syncBoardSettingsToServer();
 }
 
@@ -246,7 +382,7 @@ function applyBoardSettingsToUI() {
 }
 
 // Новая единая функция для синхронизации колонок и WIP (заменяет старые saveWipLimits, renameColumn)
-async function syncBoardSettingsToServer() {
+window.syncBoardSettingsToServer = async function() {
     if (!activeBoardData) return;
 
     activeBoardData.columns.forEach(c => {
@@ -260,23 +396,64 @@ async function syncBoardSettingsToServer() {
 
     activeBoardData.columns_data = JSON.stringify(activeBoardData.columns);
 
+    // Формируем строгий payload для предотвращения 500 ошибки (Validation Error)
+    const payload = {
+        wip_enabled: 1,
+        dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
+        columns_data: activeBoardData.columns_data
+    };
+
     await fetch(`/api/boards/${activeBoardId}/settings`, {
         method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(activeBoardData)
+        headers: { 'Content-Type': 'application/json'}, 
+        body: JSON.stringify(payload)
     });
 
-    renderColumns();
-}
+    applyDropzonesVisibility();
+    updateWipIndicators();
+     activeBoardData.columns.forEach(col => {
+        if (!col.archived) {
+            const titleSpan = document.getElementById(`title-${col.id}`);
+            if (titleSpan) titleSpan.innerText = col.name;
+        }
+    });
+};
 
 
-// Кнопки плюс/минус
+
+// Обновленная функция изменения числового лимита
 function changeWip(status, delta) {
     const input = document.getElementById(`wip-input-${status}`);
     let val = parseInt(input.value) || 0;
     val += delta;
     if (val < 0) val = 0;
     input.value = val;
+    
+    const col = activeBoardData.columns.find(c => c.id === status);
+    if (col) {
+        col.wip_limit = val;
+        
+        // НЕМЕДЛЕННО обновляем индикатор на странице
+        const indicator = document.getElementById(`wip-indicator-${status}`);
+        if (indicator) {
+            // Подсчитываем текущее количество задач в колонке
+            const currentCount = currentTasks.filter(t => t.status === status).length;
+            indicator.textContent = `WIP: ${currentCount}/${val}`;
+            
+            indicator.classList.remove('warning', 'danger');
+            if (val > 0 && currentCount >= val) {
+                indicator.classList.add('danger');
+            } else if (val > 0 && currentCount >= val * 0.8) {
+                indicator.classList.add('warning');
+            }
+        }
+        
+        // Также обновляем счетчик лимита в выпадающем меню
+        const wipInput = document.getElementById(`wip-input-${status}`);
+        if (wipInput) wipInput.value = val;
+    }
+    
+    // Сохраняем на сервер в фоне
     syncBoardSettingsToServer();
 }
 
@@ -360,7 +537,7 @@ function switchView(view) {
     const noMsg = document.getElementById('user-no-board-msg');
     if (actions) actions.style.display = hasBoard ? 'block' : 'none';
     if (noMsg) noMsg.style.display = hasBoard ? 'none' : 'block';
-    
+    if (!hasBoard) updateProjectProgress();
     if (view === 'folders') loadBoards();
     if (view === 'analytics' && activeBoardId) loadLogs();
 }
@@ -371,11 +548,9 @@ function switchView(view) {
 function toggleChat() {
     const chat = document.getElementById('chat-sidebar');
     const viewContainer = document.querySelector('.view-container');
-    
     if (chat.parentElement !== viewContainer) {
         viewContainer.appendChild(chat);
     }
-    
     chat.style.display = chat.style.display === 'none' ? 'flex' : 'none';
     if (chat.style.display === 'flex') scrollToChatBottom();
 }
@@ -393,7 +568,6 @@ function appendMessageToChat(msg) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'chat-msg';
-    
     let linkedHtml = '';
     if (msg.linked_task_id) {
         // Изменено: вызывается openTaskFromChat вместо openModalForEdit
@@ -403,7 +577,6 @@ function appendMessageToChat(msg) {
             </div>
         `;
     }
-    
     div.innerHTML = `
         <div class="chat-msg-author">${msg.username}</div>
         ${linkedHtml}
@@ -422,14 +595,12 @@ function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const content = input.value.trim();
     if (!content && !linkedChatTaskId) return;
-    
     const payload = {
         type: 'chat',
         content: content,
         linked_task_id: linkedChatTaskId,
         linked_task_title: linkedChatTaskTitle
     };
-    
     if (boardSocket && boardSocket.readyState === WebSocket.OPEN) {
         boardSocket.send(JSON.stringify(payload));
         input.value = '';
@@ -441,7 +612,6 @@ function sendChatMessage() {
 // Функция связывания задачи с чатом
 function linkTaskToChat() {
     if (!currentOpenedTask) return;
-    
     linkedChatTaskId = currentOpenedTask.id;
     linkedChatTaskTitle = currentOpenedTask.title;
     
@@ -452,12 +622,11 @@ function linkTaskToChat() {
     
     const chat = document.getElementById('chat-sidebar');
     const viewContainer = document.querySelector('.view-container');
-    
+
     // Динамическое перемещение чата в глобальный контейнер, чтобы он отображался поверх архива
     if (chat.parentElement !== viewContainer) {
         viewContainer.appendChild(chat);
     }
-    
     if (chat.style.display === 'none') {
         chat.style.display = 'flex';
         scrollToChatBottom();
@@ -473,31 +642,47 @@ function clearTaskPreview() {
 
 // --- ДОСКИ ---
 async function loadBoards() {
-    const res = await fetch('/api/boards');
-    currentBoards = await res.json();
-    renderFolders();
+    if (isGuest) return;
+    try {
+        const res = await fetch('/api/boards');
+        if (!res.ok) {
+            if (res.status === 401) {
+                // Если не авторизован - показываем логин
+                showLogin();
+                return;
+            }
+            console.error('Ошибка загрузки досок:', res.status);
+            currentBoards = [];
+            renderFolders();
+            return;
+        }
+        const data = await res.json();
+        currentBoards = Array.isArray(data) ? data : [];
+        renderFolders();
+    } catch (err) {
+        console.error('Ошибка загрузки досок:', err);
+        currentBoards = [];
+        renderFolders();
+    }
 }
 
 function renderFolders() {
     const grid = document.getElementById('folders-grid-container');
     if (!grid) return;
     grid.innerHTML = '';
-    
+    if (isGuest) return;
     currentBoards.forEach(b => {
         const d = document.createElement('div');
         d.className = 'folder-item';
-        
         // Если папка активна, просто добавляем класс CSS
         if (activeBoardId === b.id) {
             d.classList.add('active');
         }
-        
         // Рендерим чистую структуру без инлайновых стилей
         d.innerHTML = `
             <div class="folder-icon"></div>
             <div class="folder-name">${b.title}</div>
         `;
-        
         d.onclick = () => selectBoard(b);
         grid.appendChild(d);
     });
@@ -515,16 +700,12 @@ async function promptCreateBoard() {
 
 function selectBoard(board) {
     if (isGuest) return showLogin();
-    
     activeBoardId = board.id;
     activeBoardData = board;
     document.getElementById('main-board-title').innerText = board.title;
-    
-    // Показ кнопки переименования доски
     const editBtn = document.getElementById('edit-board-title-btn');
     if (editBtn) editBtn.style.display = 'block';
 
-    // Разбор динамических колонок
     try {
         activeBoardData.columns = board.columns_data ? JSON.parse(board.columns_data) : [
             {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
@@ -534,22 +715,24 @@ function selectBoard(board) {
     } catch(e) {
         activeBoardData.columns = [];
     }
-    
-    document.getElementById('board-wip-toggle').checked = !!board.wip_enabled;
-    
+    document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
+
+    if (window.applyScrollModeSetting) {
+        window.applyScrollModeSetting();
+    }
+    applyDropzonesVisibility();
+
     switchView('board');
-    renderColumns(); // Генерирует HTML колонок и вызывает setupDragAndDrop + renderBoardCards
+    renderColumns();
     loadTasks();
     loadMembers();
     loadChatMessages();
 
-    // Переподключение WebSocket
     if (boardSocket) {
         boardSocket.close();
     }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     boardSocket = new WebSocket(`${protocol}//${window.location.host}/ws/boards/${board.id}`);
-    
     boardSocket.onmessage = async function(event) {
         const data = JSON.parse(event.data);
         if (data.type === 'update') {
@@ -561,10 +744,16 @@ function selectBoard(board) {
                     activeBoardData = updatedBoard;
                     document.getElementById('main-board-title').innerText = activeBoardData.title;
                     try {
-                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [];
-                    } catch(e) {}
-                    document.getElementById('board-wip-toggle').checked = !!activeBoardData.wip_enabled;
+                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [
+                            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+                            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+                            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+                        ];
+                    } catch(e) {
+                        activeBoardData.columns = [];
+                    }
                     renderColumns();
+                    updateWipIndicators();
                 }
             }
             loadTasks();
@@ -583,14 +772,13 @@ function selectBoard(board) {
 }
 
 
+
+
 // Возврат из меню Хаба при повторном клике на иконку
 document.getElementById('menu-to-analytics').onclick = () => {
-    if (!activeBoardId) return alert('Выберите доску в меню папок.');
-    
-    document.getElementById('analytics-logs-view').style.display = 'none';
+    if (!activeBoardId) return alert('Выберите доску в меню папок.');document.getElementById('analytics-logs-view').style.display = 'none';
     document.getElementById('analytics-archive-view').style.display = 'none';
     document.querySelector('#view-analytics .folders-grid').style.display = 'grid';
-    
     switchView('analytics');
 };
 
@@ -604,7 +792,6 @@ async function loadMembers() {
 function renderMembers(members) {
     const list = document.getElementById('connected-members-list');
     list.innerHTML = '';
-    
     members.forEach(m => {
         const li = document.createElement('li');
         li.className = 'member-item';
@@ -619,7 +806,7 @@ function renderMembers(members) {
         
         // Крестик удаления (X) рендерится только в том случае, если пользователь НЕ является владельцем доски
         const deleteBtnHtml = !isOwner ? `<button onclick="removeMember('${m.username}')">&times;</button>` : '';
-        
+
         li.innerHTML = `
             <span>${m.username}${badges}</span>
             ${deleteBtnHtml}
@@ -632,43 +819,36 @@ function renderMembers(members) {
 function renderBoardMembers(members) {
     const container = document.getElementById('board-members-list');
     if (!container) return;
-    
     // Очистка контейнера перед повторным рендерингом
     container.innerHTML = '';
-    
+
     members.forEach(member => {
         // Проверка прав текущего элемента списка
         const isOwner = activeBoardData && member === activeBoardData.owner_username;
         const isMe = activeUser && member === activeUser.username;
-        
         // Создание элемента интерфейса для участника
         const item = document.createElement('div');
         item.className = 'member-item';
         item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 4px 0;';
-        
+
         // Формирование текстовой подписи с суффиксами статуса
         let badges = '';
         if (isOwner) badges += ' <span style="color: gray; font-size: 13px; font-style: italic;">(Владелец)</span>';
         if (isMe) badges += ' <span style="color: gray; font-size: 13px; font-style: italic;">(Вы)</span>';
-        
         const nameSpan = document.createElement('span');
         nameSpan.innerHTML = `${member}${badges}`;
         item.appendChild(nameSpan);
-        
         // Кнопка удаления (крестик) добавляется для всех, кроме владельца доски
         if (!isOwner) {
             const cross = document.createElement('span');
             cross.innerText = '✖';
             cross.style.cssText = 'color: red; cursor: pointer; margin-left: 8px; font-weight: bold; font-size: 14px;';
-            
             cross.onclick = async () => {
                 if (!confirm(`Удалить пользователя ${member} из участников доски?`)) return;
-                
                 try {
                     const res = await fetch(`/api/boards/${activeBoardId}/members/${member}`, {
                         method: 'DELETE'
                     });
-                    
                     if (res.ok) {
                         item.remove();
                         // Если текущий пользователь удалил самого себя, страница перезагружается для применения ограничений доступа
@@ -684,10 +864,8 @@ function renderBoardMembers(members) {
                     alert('Произошла сетевая ошибка при удалении участника');
                 }
             };
-            
             item.appendChild(cross);
         }
-        
         container.appendChild(item);
     });
 }
@@ -696,7 +874,6 @@ async function addMember() {
     const input = document.getElementById('new-member-name');
     const username = input.value.trim();
     if (!username || !activeBoardId) return;
-    
     const res = await fetch(`/api/boards/${activeBoardId}/members`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username })
     });
@@ -714,37 +891,45 @@ async function removeMember(username) {
     if (res.ok) loadMembers();
 }
 
-async function toggleBoardWip() {
-    if (!activeBoardData) return;
-    activeBoardData.wip_enabled = document.getElementById('board-wip-toggle').checked ? 1 : 0;
-    await syncWipToServer();
-}
-
-// async function saveWipLimits() {
-//     if (!activeBoardData) return;
-//     activeBoardData.wip_todo = parseInt(document.getElementById('wip-input-todo').value) || 0;
-//     activeBoardData.wip_in_progress = parseInt(document.getElementById('wip-input-in_progress').value) || 0;
-//     activeBoardData.wip_done = parseInt(document.getElementById('wip-input-done').value) || 0;
-//     await syncWipToServer();
-// }
-
 async function syncWipToServer() {
     await fetch(`/api/boards/${activeBoardId}/wip`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(activeBoardData)
-    });
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({wip_enabled: 1, columns_data: activeBoardData.columns_data})});
     renderBoardCards();
 }
 
 async function loadTasks() {
     const res = await fetch(`/api/tasks?board_id=${activeBoardId}`);
     currentTasks = await res.json();
-    
     // Обновляем список исполнителей в меню фильтров на основе полученных задач
     updateFilterAssigneesUI();
-    
     renderBoardCards();
+    updateWipIndicators(); // ДОБАВЛЕНО
 }
 
+
+async function deleteCurrentTask() {
+    if (!editingTaskId) return;
+    if (!confirm('Удалить задачу безвозвратно?')) return;
+    const res = await fetch(`/api/tasks/${editingTaskId}`, { method: 'DELETE' });
+    if (res.ok) {
+        closeModal();
+        await loadTasks();
+        if (document.getElementById('analytics-archive-view').style.display === 'block') await window.openArchiveViewer();
+        if (document.getElementById('analytics-backlog-view').style.display === 'block') await window.openBacklogViewer();
+    } else {
+        alert('Ошибка при удалении задачи');
+    }
+}
+
+async function deleteTaskDirectly(taskId) {
+    if (!confirm('Удалить задачу?')) return;
+    const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    if (res.ok) {
+        await loadTasks();
+    } else {
+        alert('Ошибка при удалении задачи');
+    }
+}
 
 function applySort(method) {
     currentSortMethod = method;
@@ -752,10 +937,8 @@ function applySort(method) {
 }
 
 function renderBoardCards() {
-    // Динамическое получение зон отрисовки и инициализация счетчиков
     const zones = {};
     const counts = {};
-    
     if (activeBoardData && activeBoardData.columns) {
         activeBoardData.columns.forEach(col => {
             if (!col.archived) {
@@ -776,11 +959,11 @@ function renderBoardCards() {
     if (currentFilters.assignees.length > 0) {
         tasksToRender = tasksToRender.filter(t => currentFilters.assignees.includes(t.assignee));
     }
-    
+
     if (currentFilters.priorities.length > 0) {
         tasksToRender = tasksToRender.filter(t => currentFilters.priorities.includes(t.priority));
     }
-    
+
     if (currentFilters.deadline !== 'all') {
         const limitDays = parseInt(currentFilters.deadline);
         tasksToRender = tasksToRender.filter(t => {
@@ -809,38 +992,52 @@ function renderBoardCards() {
         tasksToRender.sort((a, b) => (weights[b.priority] || 0) - (weights[a.priority] || 0));
     }
 
-    // 3. Рендеринг карточек и обработка дедлайнов
+    // 3. Рендеринг карточек с описанием
     tasksToRender.forEach(task => {
         if (counts[task.status] !== undefined) {
             counts[task.status]++;
         }
-        
         const card = document.createElement('div');
         card.className = 'task-card';
         card.dataset.id = task.id;
-        
-        let dateHtml = '<div>📅 —</div>';
+        // Описание задачи (обрезаем для безопасности)
+        const description = task.description || '';
+        let descriptionHtml = '';
+        if (description) {
+            let shortDesc = description.length > 100 ? description.substring(0, 97) + '...' : description;
+            descriptionHtml = `<div class="card-description">${escapeHtml(shortDesc)}</div>`;
+        }
+        let dateHtml = '<span>📅 —</span>';
         if (task.date) {
             const tDate = new Date(task.date);
             const hoursLeft = (tDate - now) / (1000 * 60 * 60);
             const dateStr = tDate.toLocaleString('ru-RU', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
-            
-            // Если осталось менее 24 часов или просрочено
+
             if (hoursLeft <= 24) {
-                dateHtml = `<div style="color: #cc0000; font-weight: bold;">📅 ${dateStr}</div>`;
+                dateHtml = `<span style="color: #dc3545;">📅 ${escapeHtml(dateStr)}</span>`;
             } else {
-                dateHtml = `<div>📅 ${dateStr}</div>`;
+                dateHtml = `<span>📅 ${escapeHtml(dateStr)}</span>`;
             }
         }
 
+        const priorityClass = task.priority === 'Высокая' ? 'high' : (task.priority === 'Средняя' ? 'medium' : 'low');
+        const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
+
         card.innerHTML = `
-            <div class="card-top"><span>${task.title}</span><span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span></div>
+            <div class="card-title">
+                <span class="card-priority ${priorityClass}"></span>
+                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(task.title)}</span>
+            </div>
+            ${descriptionHtml}
             <div class="card-meta-info">
-                <div>👤 ${task.assignee || '—'}</div>
+                <span>👤 ${escapeHtml(task.assignee || '—')}</span>
                 ${dateHtml}
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    ${progressHtml}
+                </div>
             </div>
         `;
-        
+
         card.onclick = () => openModalForEdit(task.id);
         if (zones[task.status]) {
             zones[task.status].appendChild(card);
@@ -852,12 +1049,33 @@ function renderBoardCards() {
         const countEl = document.getElementById(`count-${status}`);
         if (countEl) {
             countEl.innerText = counts[status];
-            
-            // Использование динамического лимита для текущей архитектуры колонок
-            if (activeBoardData && activeBoardData.wip_enabled) {
+            // Обновление WIP-индикатора
+            const indicator = document.getElementById(`wip-indicator-${status}`);
+            if (indicator && activeBoardData) {
                 const col = activeBoardData.columns.find(c => c.id === status);
                 const limit = col ? col.wip_limit : 0;
+                const current = counts[status];
                 
+                if (limit > 0) {
+                    indicator.textContent = `WIP: ${current}/${limit}`;
+                    indicator.style.display = 'inline-block';
+                    
+                    indicator.classList.remove('warning', 'danger');
+                    if (current >= limit) {
+                        indicator.classList.add('danger');
+                    } else if (current >= limit * 0.8) {
+                        indicator.classList.add('warning');
+                    }
+                } else {
+                    indicator.style.display = 'none';
+                }
+            }
+            
+            // Подсветка счётчика при превышении лимита
+            if (activeBoardData) {
+                const col = activeBoardData.columns.find(c => c.id === status);
+                const limit = col ? col.wip_limit : 0;
+
                 if (limit > 0 && counts[status] >= limit) {
                     countEl.classList.add('limit-exceeded');
                 } else {
@@ -868,6 +1086,144 @@ function renderBoardCards() {
             }
         }
     });
+
+    updateProjectProgress();
+}
+
+// Прогресс проекта: доля задач, находящихся в колонке(ах) "Done", относительно всех задач
+// во включённых в расчёт колонках. Настраивается пользователем через шестерёнку у прогресс-бара:
+// - какие колонки участвуют в расчёте (знаменатель) — по умолчанию все неархивные;
+// - какие колонки считаются "Done" (числитель, можно несколько) — по умолчанию колонка
+//   с названием "Готово"/"Done" (без учёта регистра), а если такой нет — последняя колонка.
+// Считается по полному списку задач доски (currentTasks), без учёта активных фильтров,
+// чтобы включение/выключение фильтров не влияло на показанный процент.
+function getProgressSettings() {
+    if (!activeBoardData || !activeBoardData.columns) {
+        return { includedIds: [], doneIds: [] };
+    }
+
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+
+    let included = null;
+    let done = null;
+    if (activeBoardData.progress_done_columns) {
+        try {
+            const parsed = JSON.parse(activeBoardData.progress_done_columns);
+            included = Array.isArray(parsed.included) ? parsed.included : null;
+            done = Array.isArray(parsed.done) ? parsed.done : null;
+        } catch (e) { /* настройка не задана или повреждена — используем дефолты */ }
+    }
+
+    const activeIds = activeCols.map(c => c.id);
+    const includedIds = included ? included.filter(id => activeIds.includes(id)) : activeIds;
+
+    let doneIds = done ? done.filter(id => activeIds.includes(id)) : null;
+    if (!doneIds || doneIds.length === 0) {
+        const byName = activeCols.find(c => ['готово', 'done'].includes((c.name || '').trim().toLowerCase()));
+        if (byName) {
+            doneIds = [byName.id];
+        } else if (activeCols.length > 0) {
+            doneIds = [activeCols[activeCols.length - 1].id];
+        } else {
+            doneIds = [];
+        }
+    }
+
+    return { includedIds, doneIds };
+}
+
+function updateProjectProgress() {
+    const fill = document.getElementById('board-progress-fill');
+    const label = document.getElementById('board-progress-label');
+    if (!fill || !label) return;
+
+    if (!activeBoardData || !activeBoardData.columns) {
+        fill.style.width = '0%';
+        label.textContent = '0%';
+        return;
+    }
+
+    const { includedIds, doneIds } = getProgressSettings();
+    if (includedIds.length === 0) {
+        fill.style.width = '0%';
+        label.textContent = '0%';
+        return;
+    }
+
+    const includedSet = new Set(includedIds);
+    const doneSet = new Set(doneIds);
+
+    const relevantTasks = currentTasks.filter(t => includedSet.has(t.status));
+    const totalTasks = relevantTasks.length;
+    const doneTasks = relevantTasks.filter(t => doneSet.has(t.status)).length;
+
+    const percent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    fill.style.width = `${percent}%`;
+    label.textContent = `${percent}%`;
+}
+
+// Открывает панель настройки прогресса и заполняет её актуальным списком колонок
+function openProgressSettings(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('progress-settings-dropdown');
+    const opened = dropdown.style.display === 'block';
+
+    document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+    if (opened) return;
+
+    if (!activeBoardData || !activeBoardData.columns) return;
+
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+    const { includedIds, doneIds } = getProgressSettings();
+    const includedSet = new Set(includedIds);
+    const doneSet = new Set(doneIds);
+
+    const includedList = document.getElementById('progress-included-list');
+    const doneList = document.getElementById('progress-done-list');
+
+    includedList.innerHTML = activeCols.map(col => `
+        <label>
+            <input type="checkbox" class="progress-included-checkbox" value="${col.id}" ${includedSet.has(col.id) ? 'checked' : ''}>
+            ${escapeHtml(col.name)}
+        </label>
+    `).join('');
+
+    doneList.innerHTML = activeCols.map(col => `
+        <label>
+            <input type="checkbox" class="progress-done-checkbox" value="${col.id}" ${doneSet.has(col.id) ? 'checked' : ''}>
+            ${escapeHtml(col.name)}
+        </label>
+    `).join('');
+
+    dropdown.style.display = 'block';
+}
+
+// Сохраняет выбранные пользователем колонки расчёта прогресса на сервере
+async function saveProgressSettings() {
+    if (!activeBoardData) return;
+
+    const included = Array.from(document.querySelectorAll('.progress-included-checkbox:checked')).map(cb => cb.value);
+    const done = Array.from(document.querySelectorAll('.progress-done-checkbox:checked')).map(cb => cb.value);
+
+    const progressData = JSON.stringify({ included, done });
+    activeBoardData.progress_done_columns = progressData;
+
+    const payload = {
+        wip_enabled: activeBoardData.wip_enabled ? 1 : 0,
+        dropzones_enabled: activeBoardData.dropzones_enabled !== 0 ? 1 : 0,
+        columns_data: activeBoardData.columns_data || JSON.stringify(activeBoardData.columns),
+        progress_done_columns: progressData
+    };
+
+    await fetch(`/api/boards/${activeBoardId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    document.getElementById('progress-settings-dropdown').style.display = 'none';
+    updateProjectProgress();
 }
 
 
@@ -884,23 +1240,53 @@ function setupDragAndDrop() {
         el.sortableInstance = new Sortable(el, {
             group: 'kanban',
             animation: 150,
-            put: function (to, from) {
-                if (to.el === from.el) return true;
-                if (!activeBoardData || !activeBoardData.wip_enabled) return true;
-                const limit = col.wip_limit;
-                if (!limit || limit <= 0) return true;
-                const currentCount = currentTasks.filter(t => t.status === col.id).length;
-                return currentCount < limit;
-            },
+            onStart: () => { isDraggingTask = true; },
             onEnd: async (e) => {
+                isDraggingTask = false;
                 const taskId = e.item.dataset.id;
                 const nextStatus = e.to.dataset.status;
+
+                // Обработка сброса в боковые панели (Бэклог / Архив)
+                if (e.to.classList.contains('side-dropzone')) {
+                    const target = e.to.dataset.target;
+                    e.item.style.display = 'none'; // Немедленно скрываем карточку
+                    e.to.classList.remove('drag-active');
+                    document.getElementById('drag-tooltip').style.display = 'none';
+
+                    if (target === 'backlog') {
+                        await fetch(`/api/tasks/${taskId}/backlog`, { method: 'PUT' });
+                    } else if (target === 'archive') {
+                        await fetch(`/api/tasks/${taskId}/archive`, { method: 'PUT' });
+                    }
+                    await loadTasks();
+                    return;
+                }
+
                 const task = currentTasks.find(t => t.id == taskId);
                 if (task && task.status !== nextStatus) {
                     task.status = nextStatus;
                     await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(task) });
                 }
+            },
+            put: function (to, from) {
+                if (to.el === from.el) return true;
+                const limit = col.wip_limit;
+                if (!limit || limit <= 0) return true;
+                const currentCount = currentTasks.filter(t => t.status === col.id).length;
+                return currentCount < limit;
             }
+        });
+    });
+
+    // Инициализация боковых зон как валидных приемников Sortable
+    ['dropzone-backlog', 'dropzone-archive'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.sortableInstance) el.sortableInstance.destroy();
+
+        el.sortableInstance = new Sortable(el, {
+            group: 'kanban',
+            animation: 150
         });
     });
 
@@ -926,30 +1312,71 @@ function setupDragAndDrop() {
     });
 }
 
-function openModalForCreate(status) {
+
+// Полная замена функции openModalForCreate (с учетом добавленных в следующем шаге переменных для чекпоинтов)
+window.openModalForCreate = function(status = null) {
     if (!activeBoardId) return;
     editingTaskId = null;
     currentOpenedTask = null;
-    targetColumnStatus = status;
     
-    const locEl = document.getElementById('modal-location');
-    if (locEl) locEl.innerText = statusMap[status] || status;
+    const selectContainer = document.getElementById('modal-status-container');
+    const locContainer = document.getElementById('modal-location');
+    const select = document.getElementById('modal-status-select');
+    
+    select.innerHTML = ''; 
+    
+    if (status === 'backlog_creation') {
+        targetColumnStatus = 'backlog_creation';
+        selectContainer.style.display = 'none';
+        locContainer.style.display = 'block';
+        locContainer.innerText = 'Бэклог';
+    } else {
+        selectContainer.style.display = 'flex';
+        locContainer.style.display = 'none';
+        
+        if (activeBoardData && activeBoardData.columns) {
+            const activeCols = activeBoardData.columns.filter(c => !c.archived);
+            activeCols.forEach(col => {
+                const opt = document.createElement('option');
+                opt.value = col.id;
+                opt.innerText = col.name;
+                select.appendChild(opt);
+            });
+            targetColumnStatus = select.value;
+        }
+    }
 
-    document.getElementById('modal-link-task-btn').style.display = 'none'; // Скрываем кнопку в новой задаче
-
+    document.getElementById('modal-link-task-btn').style.display = 'none'; 
     document.getElementById('modal-title').value = '';
     document.getElementById('modal-assignee').value = activeUser.username;
-    document.getElementById('modal-date').value = '';
+    
+    setModalDateFields('', 'modal-date', 'modal-time');
+    setModalDateFields('', 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-description').value = '';
     document.getElementById('modal-logs').innerHTML = 'Новая задача';
+    
+    activeTaskCheckpoints = [];
+    renderCheckpoints();
+    
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
+
+    archiveBtn.style.display = 'none';
+    backlogBtn.style.display = 'none';
+    restoreBtn.style.display = 'none';
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
+    const deleteTaskBtnCreate = document.getElementById('btn-delete-task');
+    if (deleteTaskBtnCreate) deleteTaskBtnCreate.style.display = 'none';
+
+    window.updateCharCounter();
+
     document.getElementById('task-modal').style.display = 'block';
 
-    const archiveBtn = document.querySelector('.btn-archive');
+};
 
-    archiveBtn.textContent = 'В архив';
 
-    archiveBtn.onclick = archiveCurrentTask;
-}
 
 function openModalForEdit(id) {
     editingTaskId = id;
@@ -960,108 +1387,145 @@ function openModalForEdit(id) {
     }
     currentOpenedTask = task;
 
-    // Поиск колонки, к которой привязана задача
     const col = activeBoardData.columns.find(c => c.id === task.status);
-
     const locEl = document.getElementById('modal-location');
-    const archiveBtn = document.querySelector('.btn-archive');
+    
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
+
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
 
     if (locEl) {
         if (col && col.archived) {
-            // Если колонка в архиве
             locEl.innerText = `${col.name} (архив)`;
             archiveBtn.textContent = 'Извлечь на доску';
             archiveBtn.onclick = async () => {
                 const firstCol = activeBoardData.columns.find(c => !c.archived);
-                if (!firstCol) {
-                    alert('Нет активных колонок!');
-                    return;
-                }
-                
-                // Перенос задачи в первую активную колонку
+                if (!firstCol) { alert('Нет активных колонок!'); return; }
                 task.status = firstCol.id;
-                await fetch(`/api/tasks/${task.id}`, { 
-                    method: 'PUT', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify(task) 
-                });
-                
+                await fetch(`/api/tasks/${task.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(task) });
                 closeModal();
                 await loadTasks();
-                
-                // Обновление окна архивированной колонки, если оно открыто
-                if (currentArchivedColId) {
-                    openArchivedColumnModal(currentArchivedColId);
-                }
+                if (currentArchivedColId) openArchivedColumnModal(currentArchivedColId);
             };
+            backlogBtn.style.display = 'none';
+            restoreBtn.style.display = 'none';
+            archiveBtn.style.display = 'block';
         } else {
-            // Обычное поведение для активных колонок
             locEl.innerText = col ? col.name : task.status;
             archiveBtn.textContent = 'В архив';
             archiveBtn.onclick = archiveCurrentTask;
+            backlogBtn.style.display = 'block';
+            restoreBtn.style.display = 'none';
+            archiveBtn.style.display = 'block';
         }
     }
 
-    document.getElementById('modal-link-task-btn').style.display = 'inline-block';
+    const deleteTaskBtn = document.getElementById('btn-delete-task');
+    if (deleteTaskBtn) deleteTaskBtn.style.display = 'block';
 
+    document.getElementById('modal-link-task-btn').style.display = 'inline-block';
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    document.getElementById('modal-date').value = task.date || '';
+    
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
     document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
     
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
+
+    document.getElementById('modal-comments-section').style.display = 'none';
+    loadTaskComments(id);
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
+    window.updateCharCounter();
+
     document.getElementById('task-modal').style.display = 'block';
 }
 
 
-function closeModal() { document.getElementById('task-modal').style.display = 'none'; }
+function closeModal() {
+    document.getElementById('task-modal').style.display = 'none';
 
-async function saveTask() {
+    const deleteTaskBtn = document.getElementById('btn-delete-task');
+    if (deleteTaskBtn) deleteTaskBtn.style.display = 'none';
+
+    const commentsSection = document.getElementById('modal-comments-section');
+    if (commentsSection) commentsSection.style.display = 'none';
+
+    const input = document.getElementById('task-comment-input');
+    if (input) input.value = '';
+    editingTaskId = null;
+    currentOpenedTask = null;
+    activeTaskCheckpoints = [];
+}
+
+
+
+window.saveTask = async function() {
+    const isBacklogCreation = targetColumnStatus === 'backlog_creation';
+    const activeCols = activeBoardData && activeBoardData.columns ? activeBoardData.columns.filter(c => !c.archived) : [];
+    const defaultCol = activeCols.length > 0 ? activeCols[0].id : 'todo';
+
+    const description = document.getElementById('modal-description').value;
+    // Фронтенд-валидация ограничения описания в 1000 символов
+    if (description && description.length > 3000) {
+        alert('Описание задачи не может превышать 1000 символов!');
+        return;
+    }
+
     const payload = {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
         assignee: document.getElementById('modal-assignee').value,
-        date: document.getElementById('modal-date').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: editingTaskId
-            ? currentOpenedTask.status
-            : targetColumnStatus
+        status: isBacklogCreation ? defaultCol : (editingTaskId ? currentOpenedTask.status : document.getElementById('modal-status-select').value),
+        backlog: isBacklogCreation ? 1 : 0,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
-    
     if (editingTaskId) await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
     else await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-    
     closeModal();
+    await loadTasks();
 
-    // Обновление отображения архива, если окно аналитики открыто
-    if (document.getElementById('analytics-archive-view').style.display === 'block') {
-        await window.openArchiveViewer();
-    }
-}
+    if (document.getElementById('analytics-archive-view').style.display === 'block') await window.openArchiveViewer();
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') await window.openBacklogViewer();
+};
+
 
 async function archiveCurrentTask() {
     if (!editingTaskId) return;
 
-    // Сначала сохраняем внесенные изменения (решение задачи 1)
     const payload = {
         board_id: activeBoardId,
         title: document.getElementById('modal-title').value || 'Без названия',
         assignee: document.getElementById('modal-assignee').value,
-        date: document.getElementById('modal-date').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
         priority: document.getElementById('modal-priority').value,
         description: document.getElementById('modal-description').value,
-        status: currentOpenedTask.status
+        status: currentOpenedTask.status,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
     };
 
-    await fetch(`/api/tasks/${editingTaskId}`, { 
-        method: 'PUT', 
-        headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify(payload) 
+    await fetch(`/api/tasks/${editingTaskId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
     });
 
-    // Затем отправляем в архив
     const res = await fetch(`/api/tasks/${editingTaskId}/archive`, {
         method: 'PUT'
     });
@@ -1074,9 +1538,15 @@ async function archiveCurrentTask() {
     closeModal();
     await loadTasks();
 
-    if (document.getElementById('analytics-archive-view').style.display === 'block')
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
         await window.openArchiveViewer();
+    }
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') {
+        await window.openBacklogViewer();
+    }
 }
+
+
 
 
 async function leaveCurrentBoard() {
@@ -1084,28 +1554,25 @@ async function leaveCurrentBoard() {
         alert('Активная доска не выбрана');
         return;
     }
-    
     // Гарантированный поиск объекта доски по ID в общем массиве
     const board = activeBoardData || currentBoards.find(b => b.id === Number(activeBoardId) || b.id === activeBoardId);
     const boardTitle = board ? board.title : 'текущую доску';
     const isOwner = board && activeUser && activeUser.username === board.owner_username;
-    
+
     let payload = {};
     if (isOwner) {
-        const newOwner = prompt("Вы являетесь владельцем этой доски. Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:");
-        if (!newOwner) return; 
+        const newOwner = prompt(`Вы являетесь владельцем доски "${boardTitle}". Для выхода необходимо передать права. Введите точное имя пользователя, которому перейдут права:`);
+        if (!newOwner) return;
         payload.new_owner = newOwner.trim();
     } else {
         // Подстановка проверенного названия доски в окно подтверждения
         if (!confirm(`Вы уверены, что хотите покинуть доску "${boardTitle}"?`)) return;
     }
-    
     const res = await fetch(`/api/boards/${activeBoardId}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    
     if (res.ok) {
         alert(`Вы вышли из доски "${boardTitle}"`);
         activeBoardId = null;
@@ -1137,18 +1604,16 @@ async function loadLogs() {
 function renderLogs(logs) {
     const container = document.getElementById('analytics-logs-list');
     container.innerHTML = '';
-    
     if (logs.length === 0) {
         container.innerHTML = '<div class="log-item">Нет зафиксированных действий.</div>';
         return;
     }
-    
     logs.forEach(log => {
         const div = document.createElement('div');
         div.className = 'log-item';
         div.innerHTML = `
-            <span class="log-time">${log.created_at}</span> 
-            <span class="log-user">${log.username}</span> 
+            <span class="log-time">${log.created_at}</span>
+            <span class="log-user">${log.username}</span>
             <span class="log-action">${log.action_desc}</span>
         `;
         container.appendChild(div);
@@ -1158,7 +1623,10 @@ function renderLogs(logs) {
 async function deleteCurrentBoard() {
     if (!activeBoardId) return;
 
-    if (!confirm('Удалить доску без возможности восстановления?'))
+    const board = activeBoardData || currentBoards.find(b => b.id === Number(activeBoardId) || b.id === activeBoardId);
+    const boardTitle = board ? board.title : 'текущую доску';
+
+    if (!confirm(`Удалить доску "${boardTitle}" без возможности восстановления?`))
         return;
 
     const res = await fetch(
@@ -1230,20 +1698,35 @@ window.openArchiveViewer = async function () {
                     minute: '2-digit'
                 })
                 : '—';
+            const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
 
+            // Исправлена проблема с версткой: progressHtml вынесен из span
             card.innerHTML = `
                 <div class="card-top">
                     <span>${task.title}</span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
-                        <button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button>
-                    </div>
                 </div>
                 <div class="card-meta-info">
                     <div>👤 ${task.assignee || '—'}</div>
                     <div>📅 ${dateStr}</div>
+                    <div><button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button></div>
                 </div>
             `;
+            // card.innerHTML = `
+            //     <div class="card-top">
+            //         <span>${task.title}</span>
+            //         <div style="display: flex; align-items: center; gap: 8px;">
+            //             <div style="display: flex; align-items: center;">
+            //                 ${progressHtml}
+            //                 <span style="color:${task.priority === 'Высокая' ? 'red' : ''}">⚠</span>
+            //             </div>
+            //             <button onclick="deleteTaskPermanent(${task.id}, event)" style="color: red; border: none; background: none; font-size: 16px; cursor: pointer; padding: 0;" title="Удалить навсегда">✖</button>
+            //         </div>
+            //     </div>
+            //     <div class="card-meta-info">
+            //         <div>👤 ${task.assignee || '—'}</div>
+            //         <div>📅 ${dateStr}</div>
+            //     </div>
+            // `;
 
             card.onclick = () => window.openModalForArchived(task);
             list.appendChild(card);
@@ -1251,10 +1734,8 @@ window.openArchiveViewer = async function () {
     }
 
     document.querySelector('#view-analytics .folders-grid').style.display = 'none';
-    
     const logsView = document.getElementById('analytics-logs-view');
     if (logsView) logsView.style.display = 'none';
-    
     document.getElementById('analytics-archive-view').style.display = 'block';
 };
 
@@ -1285,13 +1766,11 @@ function openArchivedColumnModal(colId) {
     currentArchivedColId = colId;
     const col = activeBoardData.columns.find(c => c.id === colId);
     document.getElementById('archived-col-modal-name').innerText = col.name;
-    
     const tasksContainer = document.getElementById('archived-col-tasks');
     tasksContainer.innerHTML = '';
-    
+
     // Задачи архивированной колонки, которые не были отправлены в архив персонально
     const colTasks = currentTasks.filter(t => t.status === colId && t.archived === 0);
-    
     colTasks.forEach(task => {
         const card = document.createElement('div');
         card.className = 'task-card';
@@ -1301,7 +1780,6 @@ function openArchivedColumnModal(colId) {
         card.onclick = () => openModalForEdit(task.id);
         tasksContainer.appendChild(card);
     });
-    
     document.getElementById('col-archive-modal').style.display = 'flex';
 }
 
@@ -1318,7 +1796,7 @@ async function restoreArchivedColumn() {
         activeBoardData.columns.push(col); // Перенос в конец
         await syncBoardSettingsToServer();
         closeArchivedColumnModal();
-        window.openArchiveViewer(); 
+        window.openArchiveViewer();
     }
 }
 
@@ -1336,7 +1814,6 @@ async function deleteArchivedColumn() {
 window.deleteTaskPermanent = async function(taskId, event) {
     event.stopPropagation(); // Предотвращает открытие модального окна задачи
     if (!confirm('Удалить эту задачу навсегда?')) return;
-    
     const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (res.ok) {
         await window.openArchiveViewer();
@@ -1368,45 +1845,58 @@ window.clearArchive = async function () {
 };
 
 // Открытие модального окна для архивной задачи
-window.openModalForArchived = function (task) {
+window.openModalForArchived = function(task) {
     currentOpenedTask = task;
     editingTaskId = task.id;
-
     document.getElementById('modal-title').value = task.title;
     document.getElementById('modal-assignee').value = task.assignee || '';
-    document.getElementById('modal-date').value = task.date || '';
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
     document.getElementById('modal-priority').value = task.priority || 'Средняя';
     document.getElementById('modal-description').value = task.description || '';
-
     document.getElementById('modal-location').innerText = 'Архив';
 
-    document.getElementById('modal-logs').innerHTML =`
-        <strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
+    document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
 
-    // Принудительное отображение кнопки "В чат"
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
+
     document.getElementById('modal-link-task-btn').style.display = 'inline-block';
+    document.getElementById('modal-comments-section').style.display = 'none';
 
-    const archiveBtn = document.querySelector('.btn-archive');
-    archiveBtn.textContent = 'Вернуть';
+    const commentsList = document.getElementById('task-comments-list');
+    if (commentsList) commentsList.innerHTML = '';
+    const commentInput = document.getElementById('task-comment-input');
+    if (commentInput) commentInput.value = '';
 
-    archiveBtn.onclick = async () => {
-        const res = await fetch(`/api/tasks/${task.id}/restore`, {
-            method: 'PUT'
-        });
+    loadTaskComments(task.id);
 
-        if (!res.ok) {
-            alert('Ошибка восстановления задачи');
-            return;
-        }
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
 
-        closeModal();
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
 
-        await loadTasks();
-        await openArchiveViewer();
-    };
+    archiveBtn.textContent = 'В архив';
+    archiveBtn.style.display = 'none';
+    backlogBtn.style.display = 'block';
+    restoreBtn.style.display = 'block';
+
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
+
+    window.updateCharCounter();
 
     document.getElementById('task-modal').style.display = 'block';
-};
+}
+
+
+
 
 // Универсальная функция открытия чата для текущей открытой задачи (активной или архивной)
 window.openTaskChat = function() {
@@ -1446,33 +1936,881 @@ window.openTaskChat = function() {
 async function openTaskFromChat(taskId) {
     try {
         const res = await fetch(`/api/tasks/${taskId}`);
-        
-        // Обрабатываем 404 статус до того, как он вызовет ошибку парсинга JSON
         if (res.status === 404) {
             alert('Эта задача была удалена из доски');
             return;
         }
-        
         if (!res.ok) {
             alert('Не удалось загрузить задачу');
             return;
         }
-        
         const task = await res.json();
-        
-        // Проверяем, присутствует ли задача в списке активных задач текущей доски
         const isActive = currentTasks.some(t => t.id == task.id);
-        
         if (isActive) {
-            // Если задача активна, открываем стандартное модальное окно редактирования
             openModalForEdit(task.id);
-        } else {
-            // Если задачи нет среди активных, открываем её как архивную
+        } else if (task.archived === 1) {
             window.openModalForArchived(task);
+        } else if (task.backlog === 1) {
+            window.openModalForBacklog(task);
         }
-        
     } catch (err) {
         console.log('Сетевая ошибка при получении задачи:', err);
     }
 }
 
+
+// 6. Логика панели комментариев
+function toggleTaskComments() {
+    const panel = document.getElementById('modal-comments-section');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'flex';
+        scrollToTaskCommentsBottom();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+
+async function loadTaskComments(taskId) {
+    const res = await fetch(`/api/tasks/${taskId}/comments`);
+    if (res.ok) {
+        const comments = await res.json();
+        renderTaskComments(comments);
+    }
+}
+
+function renderTaskComments(comments) {
+    const container = document.getElementById('task-comments-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (comments.length === 0) {
+        container.innerHTML =
+            '<div style="text-align:center;color:#777;font-size:13px;margin-top:10px;">Нет комментариев</div>';
+        return;
+    }
+
+    comments.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+
+        div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span class="chat-msg-author">${c.username}</span>
+                <span style="font-size:10px;color:#888;">${c.created_at}</span>
+            </div>
+            <div class="chat-msg-text">${c.content}</div>
+        `;
+
+        container.appendChild(div);
+    });
+
+    container.scrollTop = container.scrollHeight;
+}
+
+
+async function sendTaskComment() {
+    const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block'
+        ? document.getElementById('archived-task-modal')
+        : document.getElementById('task-modal');
+
+    const input = activeModal?.querySelector('#task-comment-input') || document.getElementById('task-comment-input');
+    if (!input) return;
+
+    const content = input.value.trim();
+    if (!content || !editingTaskId) return;
+    const res = await fetch(`/api/tasks/${editingTaskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content })
+    });
+    if (res.ok) {
+        input.value = '';
+        await loadTaskComments(editingTaskId);
+        await loadLogs();
+    }
+}
+
+
+function scrollToTaskCommentsBottom(passedContainer = null) {
+    let container = passedContainer;
+    if (!container) {
+        const activeModal = document.getElementById('archived-task-modal')?.style.display === 'block'
+            ? document.getElementById('archived-task-modal')
+            : document.getElementById('task-modal');
+        container = activeModal?.querySelector('#task-comments-list') || document.getElementById('task-comments-list');
+    }
+
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+
+window.openBacklogViewer = async function () {
+    if (!activeBoardId) return;
+
+    const res = await fetch(`/api/boards/${activeBoardId}/backlog`);
+    if (!res.ok) return;
+
+    const tasks = await res.json();
+
+    const list = document.getElementById('backlog-tasks-list');
+    if (list) {
+        list.innerHTML = '';
+        tasks.forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.dataset.id = task.id;
+
+            const dateStr = task.date ? new Date(task.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            const progressHtml = getCheckpointsProgressHtml(task.checkpoints);
+
+            // Исправлена проблема с версткой: progressHtml вынесен из span
+            card.innerHTML = `
+                <div class="card-top">
+                    <span>${task.title}</span>
+                </div>
+                <div class="card-meta-info">
+                    <div>👤 ${task.assignee || '—'}</div>
+                    <div>📅 ${dateStr}</div>
+                </div>
+            `;
+            card.onclick = () => window.openModalForBacklog(task);
+            list.appendChild(card);
+        });
+    }
+
+    document.querySelector('#view-analytics .folders-grid').style.display = 'none';
+    const logsView = document.getElementById('analytics-logs-view');
+    if (logsView) logsView.style.display = 'none';
+    const archiveView = document.getElementById('analytics-archive-view');
+    if (archiveView) archiveView.style.display = 'none';
+
+    document.getElementById('analytics-backlog-view').style.display = 'block';
+};
+
+window.closeBacklogViewer = function () {
+    document.querySelector('#view-analytics .folders-grid').style.display = 'grid';
+    document.getElementById('analytics-backlog-view').style.display = 'none';
+};
+
+window.openModalForBacklog = function (task) {
+    currentOpenedTask = task;
+    editingTaskId = task.id;
+
+    document.getElementById('modal-title').value = task.title;
+    document.getElementById('modal-assignee').value = task.assignee || '';
+    setModalDateFields(task.date, 'modal-date', 'modal-time');
+    setModalDateFields(task.start_date, 'modal-start-date', 'modal-start-time');
+
+    document.getElementById('modal-priority').value = task.priority || 'Средняя';
+    document.getElementById('modal-description').value = task.description || '';
+    document.getElementById('modal-status-container').style.display = 'none';
+    document.getElementById('modal-location').style.display = 'block';
+
+    document.getElementById('modal-location').innerText = 'Бэклог';
+
+    document.getElementById('modal-logs').innerHTML = `<strong>${task.creator}</strong> создал(а) задачу: <span>${task.created_at || '—'}</span>`;
+
+    document.getElementById('modal-link-task-btn').style.display = 'inline-block';
+
+    document.getElementById('modal-comments-section').style.display = 'none';
+
+    const commentsList = document.getElementById('task-comments-list');
+    if (commentsList) commentsList.innerHTML = '';
+    const commentInput = document.getElementById('task-comment-input');
+    if (commentInput) commentInput.value = '';
+
+    loadTaskComments(task.id);
+
+    try {
+        activeTaskCheckpoints = task.checkpoints ? JSON.parse(task.checkpoints) : [];
+    } catch (e) {
+        activeTaskCheckpoints = [];
+    }
+    renderCheckpoints();
+
+    const archiveBtn = document.getElementById('btn-to-archive');
+    const backlogBtn = document.getElementById('btn-to-backlog');
+    const restoreBtn = document.getElementById('btn-restore-board');
+
+    archiveBtn.textContent = 'В архив';
+    archiveBtn.onclick = archiveCurrentTask;
+    archiveBtn.style.display = 'block';
+    backlogBtn.style.display = 'none';
+    restoreBtn.style.display = 'block';
+
+    restoreBtn.onclick = window.toggleBoardColumnSelect;
+
+    window.updateCharCounter();
+
+    document.getElementById('task-modal').style.display = 'block';
+};
+
+
+async function sendCurrentTaskToBacklog() {
+    if (!editingTaskId) return;
+    const payload = {
+        board_id: activeBoardId,
+        title: document.getElementById('modal-title').value || 'Без названия',
+        assignee: document.getElementById('modal-assignee').value,
+        date: getModalDateString('modal-date', 'modal-time'),
+        start_date: getModalDateString('modal-start-date', 'modal-start-time'),
+        priority: document.getElementById('modal-priority').value,
+        description: document.getElementById('modal-description').value,
+        status: currentOpenedTask.status,
+        checkpoints: JSON.stringify(activeTaskCheckpoints)
+    };
+
+    await fetch(`/api/tasks/${editingTaskId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+    await fetch(`/api/tasks/${editingTaskId}/backlog`, { method: 'PUT' });
+    closeModal();
+    await loadTasks();
+
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
+        await window.openArchiveViewer();
+    }
+}
+
+
+
+window.toggleBoardColumnSelect = function(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('board-column-select');
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+    }
+    const activeCols = activeBoardData.columns.filter(c => !c.archived);
+    dropdown.innerHTML = '';
+    activeCols.forEach(col => {
+        const btn = document.createElement('button');
+        btn.innerText = col.name;
+        btn.onclick = () => {
+            // Определение источника задачи по ее статусу и перенаправление в правильную функцию
+            if (currentOpenedTask && currentOpenedTask.archived === 1) {
+                restoreTaskFromArchive(editingTaskId, col.id);
+            } else {
+                restoreTaskFromBacklog(editingTaskId, col.id);
+            }
+        };
+        dropdown.appendChild(btn);
+    });
+    dropdown.style.display = 'block';
+};
+
+async function restoreTaskFromBacklog(taskId, columnId) {
+    await fetch(`/api/tasks/${taskId}/restore_from_backlog`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: columnId })
+    });
+    document.getElementById('board-column-select').style.display = 'none';
+    closeModal();
+    await loadTasks();
+    if (document.getElementById('analytics-backlog-view').style.display === 'block') {
+        await window.openBacklogViewer();
+    }
+}
+
+function initSearchListener() {
+    const searchInput = document.getElementById('global-search-input');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        clearTimeout(searchTimeout);
+        if (query.length < 2) {
+            document.getElementById('search-results-dropdown').style.display = 'none';
+            return;
+        }
+        searchTimeout = setTimeout(() => performSearch(query), 400);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-container')) {
+            const drop = document.getElementById('search-results-dropdown');
+            if (drop) drop.style.display = 'none';
+        }
+    });
+}
+
+async function performSearch(query) {
+    if (!activeBoardId) return;
+    const res = await fetch(`/api/boards/${activeBoardId}/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const dropdown = document.getElementById('search-results-dropdown');
+    dropdown.innerHTML = '';
+    let hasResults = false;
+
+    const categories = [
+        { key: 'board', name: 'Доска', icon: '📝' },
+        { key: 'backlog', name: 'Бэклог', icon: '☰' },
+        { key: 'archive', name: 'Архив', icon: '📦' },
+        { key: 'chat', name: 'Чат', icon: '💬' },
+        { key: 'logs', name: 'Журнал действий', icon: '📋' }
+    ];
+
+    categories.forEach(cat => {
+        if (data[cat.key] && data[cat.key].length > 0) {
+            hasResults = true;
+            const catHeader = document.createElement('div');
+            catHeader.className = 'search-category-header';
+            catHeader.innerText = `${cat.icon} ${cat.name}`;
+            dropdown.appendChild(catHeader);
+
+            data[cat.key].forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'search-result-item';
+                if (['board', 'backlog', 'archive'].includes(cat.key)) {
+                    row.innerText = item.title;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        openTaskFromChat(item.id);
+                    };
+                } else if (cat.key === 'chat') {
+                    row.innerHTML = `<strong>${item.username}:</strong> <span style="font-size: 11px;">${item.content}</span>`;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        const chat = document.getElementById('chat-sidebar');
+                        if (chat.style.display === 'none') toggleChat();
+                    };
+                } else if (cat.key === 'logs') {
+                    row.innerHTML = `<strong>${item.username}:</strong> <span style="font-size: 11px;">${item.content}</span>`;
+                    row.onclick = () => {
+                        dropdown.style.display = 'none';
+                        switchView('analytics');
+                        openLogsViewer();
+                    };
+                }
+                dropdown.appendChild(row);
+            });
+        }
+    });
+
+    if (!hasResults) {
+        dropdown.innerHTML = '<div style="padding: 10px; text-align: center; color: #777; font-size: 12px;">Нет совпадений</div>';
+    }
+
+    dropdown.style.display = 'block';
+}
+
+async function renameColumn(colId) {
+    const input = document.getElementById(`rename-input-${colId}`);
+    if (!input) return;
+    const newName = input.value.trim() === '' ? 'Без названия' : input.value.trim();
+    const col = activeBoardData.columns.find(c => c.id === colId);
+    if (col && col.name !== newName) {
+        const oldName = col.name;
+        col.name = newName;
+        await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: `Изменил(а) название колонки с '${oldName}' на '${newName}'`}) });
+    }
+    await syncBoardSettingsToServer();
+}
+
+// 2. Логика чекпоинтов
+function renderCheckpoints() {
+    const list = document.getElementById('checkpoints-list');
+    if (!list) return;
+    list.innerHTML = '';
+    activeTaskCheckpoints.forEach(cp => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 6px;';
+        div.innerHTML = `
+            <input type="checkbox" ${cp.done ? 'checked' : ''} onchange="toggleCheckpoint(${cp.id})">
+            <span style="flex: 1; font-size: 13px; text-decoration: ${cp.done ? 'line-through' : 'none'}; color: ${cp.done ? '#777' : '#000'};">${cp.text}</span>
+            <button onclick="deleteCheckpoint(${cp.id})" style="background: none; border: none; color: #cc0000; cursor: pointer; font-size: 16px;">&times;</button>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function addCheckpoint() {
+    const input = document.getElementById('new-checkpoint-input');
+    const text = input.value.trim();
+    if (!text) return;
+    activeTaskCheckpoints.push({ id: Date.now(), text: text, done: false });
+    input.value = '';
+    renderCheckpoints();
+}
+
+function toggleCheckpoint(id) {
+    const cp = activeTaskCheckpoints.find(c => c.id === id);
+    if (cp) cp.done = !cp.done;
+    renderCheckpoints();
+}
+
+function deleteCheckpoint(id) {
+    activeTaskCheckpoints = activeTaskCheckpoints.filter(c => c.id !== id);
+    renderCheckpoints();
+}
+
+// Хелпер генерации HTML прогресс-бара для карточек
+function getCheckpointsProgressHtml(checkpointsStr) {
+    try {
+        const cps = checkpointsStr ? JSON.parse(checkpointsStr) : [];
+        if (cps.length === 0) return '';
+        const doneCount = cps.filter(c => c.done).length;
+        const pct = Math.round((doneCount / cps.length) * 100);
+        return `
+            <div style="display: flex; align-items: center; gap: 6px; margin-right: 12px;" title="Чекпоинты">
+                <div style="width: 40px; height: 6px; background: #ccc; border-radius: 3px; overflow: hidden;">
+                    <div style="width: ${pct}%; height: 100%; background: #0000ff;"></div>
+                </div>
+                <span style="font-size: 11px; color: #555; font-weight: bold;">${doneCount}/${cps.length}</span>
+            </div>
+        `;
+    } catch(e) {
+        return '';
+    }
+}
+
+function initDropzoneTooltips() {
+    const tooltip = document.getElementById('drag-tooltip');
+    if (!tooltip) return;
+
+    // Click on side zones navigates to the corresponding section
+    const backlogZone = document.getElementById('dropzone-backlog');
+    if (backlogZone) {
+        backlogZone.addEventListener('click', (e) => {
+            if (!isDraggingTask) {
+                if (activeBoardId) {
+                    switchView('analytics');
+                    window.openBacklogViewer();
+                }
+            }
+        });
+    }
+    const archiveZone = document.getElementById('dropzone-archive');
+    if (archiveZone) {
+        archiveZone.addEventListener('click', (e) => {
+            if (!isDraggingTask) {
+                if (activeBoardId) {
+                    switchView('analytics');
+                    window.openArchiveViewer();
+                }
+            }
+        });
+    }
+
+    const zones = [
+        { id: 'dropzone-backlog', text: 'Перенести в Бэклог' },
+        { id: 'dropzone-archive', text: 'Перенести в Архив' }
+    ];
+
+    zones.forEach(z => {
+        const el = document.getElementById(z.id);
+        if (!el) return;
+
+        // Обработка обычного наведения (без перетаскивания)
+        el.addEventListener('mousemove', (e) => {
+            tooltip.innerText = z.text;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.pageX + 'px';
+            tooltip.style.top = (e.pageY - 15) + 'px';
+
+            if (isDraggingTask) {
+                el.classList.add('drag-active');
+            }
+        });
+
+        el.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+
+        // Обработка наведения в процессе активного перетаскивания (Drag & Drop)
+        el.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Обязательно для разрешения drop и отключения блокирующего курсора
+            tooltip.innerText = z.text;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.pageX + 'px';
+            tooltip.style.top = (e.pageY - 15) + 'px';
+
+            if (isDraggingTask) {
+                el.classList.add('drag-active');
+            }
+        });
+
+        el.addEventListener('dragleave', (e) => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+
+        el.addEventListener('drop', () => {
+            tooltip.style.display = 'none';
+            el.classList.remove('drag-active');
+        });
+    });
+}
+
+
+async function restoreTaskFromArchive(taskId, columnId) {
+    await fetch(`/api/tasks/${taskId}/restore`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: columnId })
+    });
+    document.getElementById('board-column-select').style.display = 'none';
+    closeModal();
+    await loadTasks();
+    if (document.getElementById('analytics-archive-view').style.display === 'block') {
+        await window.openArchiveViewer();
+    }
+}
+
+// Функция-обработчик тумблера боковых панелей
+window.toggleBoardDropzones = async function() {
+    if (!activeBoardData) return;
+    const isEnabled = document.getElementById('board-dropzones-toggle').checked ? 1 : 0;
+    activeBoardData.dropzones_enabled = isEnabled;
+    const actionDesc = isEnabled ? 'Включил(а) боковые зоны' : 'Отключил(а) боковые зоны';
+    await fetch(`/api/boards/${activeBoardId}/logs`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action_desc: actionDesc}) });
+    await syncBoardSettingsToServer();
+};
+
+// Функция переключения видимости боковых зон
+window.applyDropzonesVisibility = function() {
+    const dzLeft = document.getElementById('dropzone-backlog');
+    const dzRight = document.getElementById('dropzone-archive');
+    const isEnabled = activeBoardData && activeBoardData.dropzones_enabled !== 0;
+
+    if (!isEnabled) {
+        if (dzLeft) dzLeft.style.display = 'none';
+        if (dzRight) dzRight.style.display = 'none';
+    } else {
+        if (dzLeft) dzLeft.style.display = 'flex';
+        if (dzRight) dzRight.style.display = 'flex';
+    }
+};
+
+window.setModalDateFields = function(dateStr, dateId, timeId) {
+    if (dateStr) {
+        const parts = dateStr.split('T');
+        document.getElementById(dateId).value = parts[0];
+        document.getElementById(timeId).value = parts.length > 1 ? parts[1] : '00:00';
+    } else {
+        document.getElementById(dateId).value = '';
+        document.getElementById(timeId).value = '00:00';
+    }
+};
+
+window.getModalDateString = function(dateId, timeId) {
+    const dateVal = document.getElementById(dateId).value;
+    const timeVal = document.getElementById(timeId).value || '00:00';
+    return dateVal ? `${dateVal}T${timeVal}` : '';
+};
+
+window.toggleScrollMode = function() {
+    const scrollToggle = document.getElementById('board-scroll-toggle');
+    if (!scrollToggle) return;
+    const isEnabled = scrollToggle.checked;
+    if (isEnabled) {
+        document.body.classList.add('global-scroll-mode');
+        localStorage.setItem('kanban-global-scroll', 'true');
+    } else {
+        document.body.classList.remove('global-scroll-mode');
+        localStorage.setItem('kanban-global-scroll', 'false');
+    }
+};
+
+window.applyScrollModeSetting = function() {
+    const scrollToggle = document.getElementById('board-scroll-toggle');
+    if (!scrollToggle) return;
+    const isEnabled = localStorage.getItem('kanban-global-scroll') === 'true';
+    scrollToggle.checked = isEnabled;
+    if (isEnabled) {
+        document.body.classList.add('global-scroll-mode');
+    } else {
+        document.body.classList.remove('global-scroll-mode');
+    }
+};
+
+window.updateCharCounter = function() {
+    const descriptionInput = document.getElementById('modal-description');
+    const counterSpan = document.getElementById('char-counter');
+    if (!descriptionInput || !counterSpan) return;
+
+    const maxLength = 3000;
+    const currentLength = descriptionInput.value.length;
+    const remaining = maxLength - currentLength;
+
+    // Обновляем текст счетчика
+    counterSpan.textContent = remaining;
+    // Если осталось 0 символов (или меньше, на случай непредвиденного обхода), красим в красный
+    if (remaining <= 0) {
+        counterSpan.style.color = '#cc0000';
+    } else {
+        counterSpan.style.color = ''; // Возвращаем стандартный цвет, если текст стерли
+    }
+};
+
+// РОЛИ
+const isMentor = () => activeUser?.role === 'mentor';
+const isStudent = () => !isMentor();
+const canEdit = isStudent;
+const canViewOnly = isMentor;
+
+// селекторы(теги, классы и тд)
+const SELECTORS = {
+    createButtons: '.btn-create-board, .chat-toggle-btn[onclick*="createNewColumn"], .chat-toggle-btn[onclick*="openModalForCreate"], .chat-toggle-btn[onclick*="toggleColumnMenu"]',
+    columnControls: '.column-controls button, .drag-handle',
+    sideDropzones: '.side-dropzone',
+    modalButtons: '#btn-to-archive, #btn-to-backlog, #btn-restore-board, .btn-save',
+    archiveButtons: '.archive-modal-delete, .archive-modal-restore, button[onclick*="clearArchive"]',
+    backlogCreate: '.backlog-create-btn',
+    memberControls: '#new-member-name, button[onclick*="addMember"], .member-item button',
+    settingsCards: '.settings-card',
+    taskCards: '.task-card',
+    cardsDropzones: '.cards-dropzone',
+};
+
+function selectRole(role) {
+    selectedRole = role;
+    document.querySelectorAll('.role-btn').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`role-${role}-btn`).classList.add('selected');
+};
+
+function updateUserRoleDisplay(role) { //отображение роли у пользователя
+    const roleDisplay = document.getElementById('user-role-display');
+    if (!roleDisplay) return;
+    
+    if (role === 'mentor') {
+        roleDisplay.textContent = 'Наставник';
+    } else if (role === 'student') {
+        roleDisplay.textContent = 'Студент';
+    } else {
+        roleDisplay.textContent = 'Студент'; // по умолчанию
+    }
+    roleDisplay.style.display = 'inline-block';
+};
+
+// Ограничения для наставника по кнопкам
+function applyRoleRestrictions() {
+    const mentor = isMentor();
+    document.body.classList.toggle('mentor-mode', mentor);
+
+    // Скрываем/показываем элементы
+    const toggleDisplay = (selector, hide) => {
+        document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
+    };
+
+    toggleDisplay(SELECTORS.createButtons, mentor);
+    toggleDisplay(SELECTORS.columnControls, mentor);
+    toggleDisplay(SELECTORS.sideDropzones, mentor);
+    toggleDisplay(SELECTORS.modalButtons, mentor);
+    toggleDisplay(SELECTORS.archiveButtons, mentor);
+    toggleDisplay(SELECTORS.backlogCreate, mentor);
+    toggleDisplay(SELECTORS.memberControls, mentor);
+    toggleDisplay('#delete-board-btn, button[onclick*="deleteCurrentBoard"]', mentor);
+    toggleDisplay(SELECTORS.settingsCards, mentor);
+
+    const dragState = mentor ? { cursor: 'default', draggable: false, disabled: true } : { cursor: 'grab', draggable: true, disabled: false };
+
+    const mentorFooter = document.getElementById('mentor-footer');
+    if (mentorFooter) {
+        mentorFooter.style.display = mentor ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.toolbar > .chat-toggle-btn').forEach(el => { //скрываем кнопу
+        el.style.display = mentor ? 'none' : '';
+    });
+    
+    document.querySelectorAll(SELECTORS.taskCards).forEach(el => {
+        el.style.cursor = dragState.cursor;
+        el.draggable = dragState.draggable;
+    });
+    [columnSortable, ...document.querySelectorAll(SELECTORS.cardsDropzones).map(el => el.sortableInstance)].forEach(instance => {
+        if (instance) instance.option('disabled', dragState.disabled);
+    });
+
+    renderBoardCards();
+}
+
+// Ограничения по вводу и изменению
+function applyModalRestrictions() {
+    const mentor = isMentor();
+
+    ['modal-title', 'modal-assignee', 'modal-description'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = mentor;
+    });
+
+    ['modal-priority', 'modal-date', 'modal-time', 'modal-start-date', 'modal-start-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = mentor;
+    });
+
+    document.querySelectorAll(SELECTORS.modalButtons).forEach(el => el.style.display = mentor ? 'none' : '');
+
+    const checkpointsSection = document.querySelector('.checkpoints-section');
+    if (checkpointsSection) checkpointsSection.style.display = mentor ? 'none' : '';
+
+    const statusContainer = document.getElementById('modal-status-container');
+    const locationEl = document.getElementById('modal-location');
+    if (mentor) {
+        if (statusContainer) statusContainer.style.display = 'none';
+        if (locationEl) {
+            locationEl.style.display = 'block';
+            locationEl.innerText = 'Просмотр';
+        }
+    } else {
+        if (statusContainer) statusContainer.style.display = 'flex';
+        if (locationEl) locationEl.style.display = 'none';
+    }
+}
+
+function wrapModalFunction(originalFn, applyRestrictions) {
+    return function(...args) {
+        const result = originalFn?.apply(this, args);
+        setTimeout(applyRestrictions, 50);
+        return result;
+    };
+}
+
+window.openModalForEdit = wrapModalFunction(window.openModalForEdit, applyModalRestrictions);
+window.openModalForCreate = wrapModalFunction(window.openModalForCreate, applyModalRestrictions);
+window.openModalForArchived = wrapModalFunction(window.openModalForArchived, applyModalRestrictions);
+window.openModalForBacklog = wrapModalFunction(window.openModalForBacklog, applyModalRestrictions);
+
+// closeModal
+const originalCloseModal = window.closeModal;
+window.closeModal = function() {
+    originalCloseModal?.();
+
+    ['modal-title', 'modal-assignee', 'modal-description'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = false;
+    });
+
+    ['modal-priority', 'modal-date', 'modal-time', 'modal-start-date', 'modal-start-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+    });
+};
+
+// после лога пользователя
+const originalHandleLogin = window.handleLogin;
+window.handleLogin = function(userData) {
+    if (!userData.role) userData.role = selectedRole;
+
+    activeUser = userData;
+    isGuest = false;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-content').style.display = 'flex';
+    document.getElementById('user-display-name').innerText = userData.username;
+    document.getElementById('header-username-text').innerText = userData.username;
+
+    selectedRole = userData.role || 'student';
+    updateUserRoleDisplay(selectedRole);
+    applyRoleRestrictions();
+    switchView('folders');
+};
+
+// Обновление selectBoard
+const originalSelectBoard = window.selectBoard;
+window.selectBoard = function(board) {
+    if (isGuest) return showLogin();
+
+    activeBoardId = board.id;
+    activeBoardData = board;
+    document.getElementById('main-board-title').innerText = board.title;
+
+    const editBtn = document.getElementById('edit-board-title-btn');
+    if (editBtn) editBtn.style.display = 'block';
+
+    try {
+        activeBoardData.columns = board.columns_data ? JSON.parse(board.columns_data) : [
+            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+        ];
+    } catch {
+        activeBoardData.columns = [];
+    }
+
+    document.getElementById('board-dropzones-toggle').checked = board.dropzones_enabled !== 0;
+    if (window.applyScrollModeSetting) window.applyScrollModeSetting();
+
+    applyDropzonesVisibility();
+    switchView('board');
+    renderColumns();
+    loadTasks();
+    loadMembers();
+    loadChatMessages();
+
+    const mentorFooter = document.getElementById('mentor-footer');
+    if (mentorFooter) {
+        mentorFooter.style.display = isMentor() ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.toolbar > .chat-toggle-btn').forEach(el => {
+        el.style.display = isMentor() ? 'none' : '';
+    });
+
+    if (boardSocket) boardSocket.close();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    boardSocket = new WebSocket(`${protocol}//${window.location.host}/ws/boards/${board.id}`);
+
+    boardSocket.onmessage = async function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'update') {
+            const res = await fetch('/api/boards');
+            if (res.ok) {
+                currentBoards = await res.json();
+                const updatedBoard = currentBoards.find(b => b.id === activeBoardId);
+                if (updatedBoard) {
+                    activeBoardData = updatedBoard;
+                    document.getElementById('main-board-title').innerText = activeBoardData.title;
+                    try {
+                        activeBoardData.columns = updatedBoard.columns_data ? JSON.parse(updatedBoard.columns_data) : [
+                            {id: 'todo', name: 'В планах', wip_limit: 0, archived: false},
+                            {id: 'in_progress', name: 'В разработке', wip_limit: 0, archived: false},
+                            {id: 'done', name: 'Готово', wip_limit: 0, archived: false}
+                        ];
+                    } catch {
+                        activeBoardData.columns = [];
+                    }
+                    renderColumns();
+                    updateWipIndicators();
+                }
+            }
+            loadTasks();
+            loadChatMessages();
+        } else if (data.type === 'chat') {
+            appendMessageToChat(data);
+        }
+    };
+
+    const deleteBtn = document.getElementById('delete-board-btn');
+    deleteBtn.style.display = (board.owner_username === activeUser.username) ? 'block' : 'none';
+
+    setTimeout(applyRoleRestrictions, 100);
+};
+
+// рендеринг колонок
+const originalRenderColumns = window.renderColumns;
+window.renderColumns = function() {
+    originalRenderColumns?.();
+    setTimeout(applyRoleRestrictions, 50);
+};
+
+// рендеринг карт
+const originalRenderBoardCards = window.renderBoardCards;
+window.renderBoardCards = function() {
+    originalRenderBoardCards?.();
+    setTimeout(applyRoleRestrictions, 50);
+}
+// ПРОВЕРКА:
+
+// // 1.Проверка роли
+// activeUser = { ...activeUser, role: 'mentor' };
+// applyRoleRestrictions();
+// applyModalRestrictions();
+// console.log(document.body.classList.contains('mentor-mode')); // Должно быть: true
+
+// Кнопка переключения роли удалена — роль выбирается при входе
