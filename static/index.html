@@ -14,10 +14,6 @@
         <div class="auth-box">
             <h2>Вход в систему</h2>
             <input type="text" id="auth-username" placeholder="Ваш логин" onkeydown="if(event.key==='Enter') loginUser()">
-            <div class="auth-role-buttons">
-                <button class="role-btn" id="role-student-btn" onclick="selectRole('student')">Студент</button>
-                <button class="role-btn" id="role-mentor-btn" onclick="selectRole('mentor')">Наставник</button>
-            </div>
             <button onclick="loginUser()">Войти</button>
         </div>
     </div>

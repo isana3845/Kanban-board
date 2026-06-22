@@ -103,7 +103,7 @@ function selectBoard(board) {
     const deleteBtn = document.getElementById('delete-board-btn');
     if (deleteBtn) deleteBtn.style.display = (board.owner_username === activeUser.username) ? 'block' : 'none';
 
-    setTimeout(applyRoleRestrictions, 100);
+    setTimeout(applyRoleRestrictions, 300);
 }
 
 // ── WebSocket доски ──────────────────────────────────────────────────────────

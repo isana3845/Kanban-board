@@ -6,10 +6,7 @@ async function checkAuth() {
         if (res.status === 401) { handleGuest(); return; }
         if (res.ok) {
             const userData = await res.json();
-            if (userData.role) {
-                selectedRole = userData.role;
-                updateUserRoleDisplay(userData.role);
-            }
+            selectedRole = 'student';
             handleLoginRestore(userData);
         } else {
             handleGuest();
@@ -20,7 +17,7 @@ async function checkAuth() {
 }
 
 async function handleLoginRestore(userData) {
-    if (!userData.role) userData.role = selectedRole;
+    userData.role = 'student';
     activeUser = userData;
     isGuest = false;
 
@@ -29,8 +26,7 @@ async function handleLoginRestore(userData) {
     document.getElementById('user-display-name').innerText = userData.username;
     document.getElementById('header-username-text').innerText = userData.username;
 
-    selectedRole = userData.role || 'student';
-    updateUserRoleDisplay(selectedRole);
+    updateUserRoleDisplay('student');
 
     const savedView = sessionStorage.getItem('kanban-view') || 'folders';
     const savedBoardId = sessionStorage.getItem('kanban-board-id');
@@ -71,7 +67,9 @@ async function handleLoginRestore(userData) {
         if (deleteBtn) deleteBtn.style.display = (board.owner_username === activeUser.username) ? 'block' : 'none';
 
         connectBoardSocket(board.id);
-        applyRoleRestrictions();
+        setTimeout(() => {
+            applyRoleRestrictions();
+        }, 300);
         _switchViewOnly(savedView);
     } else {
         applyRoleRestrictions();
@@ -116,7 +114,7 @@ function handleGuest() {
 }
 
 function handleLogin(userData) {
-    userData.role = selectedRole; // ВРЕМЕННО: принудительное задание роли
+    userData.role = 'student';
     activeUser = userData;
     isGuest = false;
 

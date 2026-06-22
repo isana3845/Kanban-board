@@ -128,12 +128,12 @@ manager = ConnectionManager()
 @app.post("/api/auth/login")
 def login(data: AuthData, response: Response):
     db = get_db()
-    role = data.role or "student"
+    # role = data.role or "student"
     db.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (data.username,))
-    db.execute("UPDATE users SET role=? WHERE username=?", (role, data.username))
+    # db.execute("UPDATE users SET role=? WHERE username=?", (role, data.username))
     db.commit()
     response.set_cookie(key="session", value=data.username)
-    return {"user_id": data.username, "username": data.username, "role": role}
+    return {"user_id": data.username, "username": data.username}
 
 
 @app.get("/api/auth/me")
@@ -234,8 +234,17 @@ async def delete_col_tasks(board_id: int, column_id: str, session: Optional[str]
 @app.get("/api/boards/{board_id}/members")
 def get_members(board_id: int):
     db = get_db()
-    members = db.execute("SELECT username as username, username as id FROM board_members WHERE board_id=?",
-                         (board_id,)).fetchall()
+    has_role_col = any(col["name"] == "role" for col in db.execute("PRAGMA table_info(board_members)"))
+    if has_role_col:
+        members = db.execute(
+            "SELECT username, COALESCE(role, 'student') as role FROM board_members WHERE board_id=?",
+            (board_id,)
+        ).fetchall()
+    else:
+        members = db.execute(
+            "SELECT username, 'student' as role FROM board_members WHERE board_id=?",
+            (board_id,)
+        ).fetchall()
     return [dict(row) for row in members]
 
 
@@ -666,6 +675,45 @@ async def delete_task(task_id: int, session: Optional[str] = Cookie(None)):
     db.commit()
 
     return {"status": "ok"}
+
+@app.put("/api/boards/{board_id}/members/{username}/role")
+async def update_member_role(
+    board_id: int,
+    username: str,
+    payload: dict,
+    session: Optional[str] = Cookie(None)
+):
+    if not session:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    db = get_db()
+    board = db.execute("SELECT * FROM boards WHERE id=?", (board_id,)).fetchone()
+    if not board:
+        raise HTTPException(status_code=404, detail="Доска не найдена")
+    if board["owner_username"] != session:
+        raise HTTPException(status_code=403, detail="Только владелец доски может менять роли")
+    member = db.execute(
+        "SELECT * FROM board_members WHERE board_id=? AND username=?",
+        (board_id, username)
+    ).fetchone()
+    if not member:
+        raise HTTPException(status_code=404, detail="Участник не найден на этой доске")
+    if username == board["owner_username"]:
+        raise HTTPException(status_code=400, detail="Нельзя изменить роль владельца доски")
+    role = payload.get("role", "student")
+    if role not in ("student", "mentor"):
+        raise HTTPException(status_code=400, detail="Роль должна быть 'student' или 'mentor'")
+    db.execute("UPDATE users SET role=? WHERE username=?", (role, username))
+    has_role_col = any(col["name"] == "role" for col in db.execute("PRAGMA table_info(board_members)"))
+    if not has_role_col:
+        db.execute("ALTER TABLE board_members ADD COLUMN role TEXT DEFAULT 'student'")
+    db.execute(
+        "UPDATE board_members SET role=? WHERE board_id=? AND username=?",
+        (role, board_id, username)
+    )
+    add_log(db, board_id, session, f"Изменил(а) роль пользователя '{username}' на '{role}'")
+    db.commit()
+    await manager.broadcast_update(board_id)
+    return {"success": True, "role": role, "username": username}
 
 
 @app.get("/favicon.ico", include_in_schema=False)

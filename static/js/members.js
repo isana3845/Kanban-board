@@ -2,33 +2,112 @@
 
 async function loadMembers() {
     if (!activeBoardId) return;
-    const res     = await fetch(`/api/boards/${activeBoardId}/members`);
+    const res = await fetch(`/api/boards/${activeBoardId}/members`);
     const members = await res.json();
+    if (activeBoardData) {
+        activeBoardData.members = members;
+    }
     renderMembers(members);
 }
 
 function renderMembers(members) {
-    const list    = document.getElementById('connected-members-list');
+    const list = document.getElementById('connected-members-list');
     list.innerHTML = '';
 
-    members.forEach(m => {
-        const li      = document.createElement('li');
-        li.className  = 'member-item';
+    const currentUserIsOwner = activeBoardData && activeUser && activeUser.username === activeBoardData.owner_username;
 
-        const isMe    = m.username === activeUser.username;
-        const isOwner = activeBoardData && m.username === activeBoardData.owner_username;
+    members.forEach(m => {
+        const li = document.createElement('li');
+        li.className = 'member-item';
+
+        const isMe = m.username === activeUser.username;
+        const isBoardOwner = activeBoardData && m.username === activeBoardData.owner_username;
 
         let badges = '';
-        if (isOwner) badges += ' <span style="color: gray; font-size: 13px;">(Владелец)</span>';
-        if (isMe)    badges += ' <span style="color: gray; font-size: 13px;">(Вы)</span>';
-
-        const deleteBtnHtml = !isOwner
-            ? `<button onclick="removeMember('${m.username}')">&times;</button>`
+        if (isBoardOwner) badges += ' <span class="member-role-badge owner">Владелец</span>';
+        
+        const userRole = m.role || 'student';
+        const roleLabel = userRole === 'mentor' ? 'Наставник' : 'Студент';
+        const roleClass = userRole === 'mentor' ? 'mentor' : 'student';
+        const roleBadge = ` <span class="member-role-badge ${roleClass}">${roleLabel}</span>`;
+        
+        let roleToggleHtml = '';
+        if (currentUserIsOwner && !isMe && !isBoardOwner) {
+            // Кнопка смены роли с текстом
+            roleToggleHtml = `<button class="role-toggle-btn-text" onclick="toggleUserRole('${m.username}')">Сменить роль</button>`;
+        }
+        
+        const removeBtnHtml = !isBoardOwner 
+            ? `<button class="remove-member-btn" onclick="removeMember('${m.username}')">&times;</button>` 
             : '';
-
-        li.innerHTML = `<span>${m.username}${badges}</span>${deleteBtnHtml}`;
+        
+        li.innerHTML = `
+            <span class="member-info">
+                <span>${m.username}</span>
+                ${badges}
+                ${roleBadge}
+                ${isMe ? ' <span style="color: gray; font-size: 12px;">(Вы)</span>' : ''}
+            </span>
+            <span class="member-actions">
+                ${roleToggleHtml}
+                ${removeBtnHtml}
+            </span>
+        `;
         list.appendChild(li);
     });
+}
+
+async function toggleUserRole(username) {
+    if (!activeBoardId) return;
+    
+    // Находим пользователя
+    const member = activeBoardData.members.find(m => m.username === username);
+    if (!member) return;
+    
+    const currentRole = member.role || 'student';
+    // Если сейчас студент → меняем на наставника, если наставник → меняем на студента
+    const newRole = currentRole === 'mentor' ? 'student' : 'mentor';
+    const roleLabel = newRole === 'mentor' ? 'Наставника' : 'Студента';
+    
+    if (!confirm(`Сменить роль пользователя ${username} на ${roleLabel}?`)) return;
+    
+    try {
+        const res = await fetch(`/api/boards/${activeBoardId}/members/${username}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: newRole })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+            // Обновляем данные участников в памяти
+            if (activeBoardData && activeBoardData.members) {
+                const member = activeBoardData.members.find(m => m.username === username);
+                if (member) {
+                    member.role = newRole;
+                }
+            }
+            
+            // Если меняем роль текущего пользователя
+            if (username === activeUser.username) {
+                activeUser.role = newRole;
+                selectedRole = newRole;
+                updateUserRoleDisplay(newRole);
+                applyRoleRestrictions();
+            }
+            
+            // Обновляем список участников
+            await loadMembers();
+            
+        } else {
+            alert(data.detail || 'Ошибка при смене роли');
+            console.error('Error:', data);
+        }
+    } catch (error) {
+        console.error('Network error:', error);
+        alert('Ошибка сети. Проверьте соединение с сервером.');
+    }
 }
 
 function renderBoardMembers(members) {
@@ -83,22 +162,34 @@ async function addMember() {
     const username = input.value.trim();
     if (!username || !activeBoardId) return;
 
-    const res = await fetch(`/api/boards/${activeBoardId}/members`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ username })
-    });
+    try {
+        const res = await fetch(`/api/boards/${activeBoardId}/members`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ username })
+        });
 
-    if (res.ok) {
-        input.value = '';
-        loadMembers();
-    } else {
-        alert('Пользователь не найден в системе');
+        const data = await res.json();
+
+        if (res.ok) {
+            input.value = '';
+            loadMembers();
+        } else {
+            alert(data.detail || 'Пользователь не найден в системе');
+        }
+    } catch (error) {
+        console.error('Network error:', error);
+        alert('Ошибка сети. Проверьте соединение с сервером.');
     }
 }
 
 async function removeMember(username) {
     if (!activeBoardId || !confirm('Удалить участника?')) return;
-    const res = await fetch(`/api/boards/${activeBoardId}/members/${username}`, { method: 'DELETE' });
-    if (res.ok) loadMembers();
+    try {
+        const res = await fetch(`/api/boards/${activeBoardId}/members/${username}`, { method: 'DELETE' });
+        if (res.ok) loadMembers();
+    } catch (error) {
+        console.error('Network error:', error);
+        alert('Ошибка сети. Проверьте соединение с сервером.');
+    }
 }

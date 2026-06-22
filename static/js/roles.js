@@ -1,9 +1,26 @@
 // ─── РОЛИ ПОЛЬЗОВАТЕЛЕЙ ─────────────────────────────────────────────────────
 
-const isMentor  = () => activeUser?.role === 'mentor';
+// Получение роли пользователя на текущей доске
+function getUserRoleOnBoard(username) {
+    if (!activeBoardData) return 'student';
+    if (username === activeBoardData.owner_username) return 'owner';
+    if (activeBoardData.members) {
+        const member = activeBoardData.members.find(m => m.username === username);
+        return member ? member.role || 'student' : 'student';
+    }
+    return 'student';
+}
+
+const isMentor = () => {
+    if (!activeUser || !activeBoardData) return false;
+    if (activeUser.username === activeBoardData.owner_username) return false;
+    const role = getUserRoleOnBoard(activeUser.username);
+    return role === 'mentor';
+};
+
 const isStudent = () => !isMentor();
-const canEdit     = isStudent;
-const canViewOnly = isMentor;
+const canEdit = () => isStudent();
+const canViewOnly = () => isMentor();
 
 // CSS-селекторы элементов интерфейса, зависящих от роли
 const SELECTORS = {
@@ -14,7 +31,7 @@ const SELECTORS = {
     archiveButtons: '.archive-modal-delete, .archive-modal-restore, button[onclick*="clearArchive"]',
     backlogCreate:  '.backlog-create-btn',
     memberControls: '#new-member-name, button[onclick*="addMember"], .member-item button',
-    settingsCards:  '.settings-card',
+    settingsCards:  '.settings-card', // ← ДОБАВЛЯЕМ для настроек
     taskCards:      '.task-card',
     cardsDropzones: '.cards-dropzone',
 };
@@ -29,14 +46,30 @@ function updateUserRoleDisplay(role) {
     const roleDisplay = document.getElementById('user-role-display');
     if (!roleDisplay) return;
 
-    const labels = { mentor: 'Наставник', student: 'Студент' };
-    roleDisplay.textContent   = labels[role] || 'Студент';
+    // Проверяем, является ли пользователь владельцем
+    if (activeBoardData && activeUser && activeUser.username === activeBoardData.owner_username) {
+        roleDisplay.textContent = 'Владелец';
+    } else {
+        const labels = { 
+            mentor: 'Наставник', 
+            student: 'Студент', 
+            owner: 'Владелец' 
+        };
+        const userRole = getUserRoleOnBoard(activeUser?.username);
+        roleDisplay.textContent = labels[userRole] || 'Студент';
+        roleDisplay.style.color = userRole === 'mentor' ? '#7a4aae' : '#0067A5';
+    }
     roleDisplay.style.display = 'inline-block';
 }
 
 function applyRoleRestrictions() {
     const mentor = isMentor();
     document.body.classList.toggle('mentor-mode', mentor);
+
+    if (activeUser && activeBoardData) {
+        const userRole = getUserRoleOnBoard(activeUser.username);
+        updateUserRoleDisplay(userRole);
+    }
 
     const toggleDisplay = (selector, hide) => {
         document.querySelectorAll(selector).forEach(el => el.style.display = hide ? 'none' : '');
@@ -50,7 +83,6 @@ function applyRoleRestrictions() {
     toggleDisplay(SELECTORS.backlogCreate,  mentor);
     toggleDisplay(SELECTORS.memberControls, mentor);
     toggleDisplay('#delete-board-btn, button[onclick*="deleteCurrentBoard"]', mentor);
-    toggleDisplay(SELECTORS.settingsCards,  mentor);
 
     const dragState = mentor
         ? { cursor: 'default', draggable: false, disabled: true }
@@ -98,9 +130,6 @@ function applyModalRestrictions() {
 
     document.querySelectorAll(SELECTORS.modalButtons).forEach(el => el.style.display = mentor ? 'none' : '');
 
-    // btn-restore-board исключена из общего сброса: её видимость зависит от контекста
-    // (доска / архив / бэклог), который выставляется в modal.js и analytics.js.
-    // Для наставника кнопка всегда скрыта, для студента — не трогаем текущее состояние.
     if (mentor) {
         const restoreBtn = document.getElementById('btn-restore-board');
         if (restoreBtn) restoreBtn.style.display = 'none';
