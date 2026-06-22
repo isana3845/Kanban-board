@@ -19,17 +19,35 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .wide-dropdown { width: 260px; }
 .wip-title { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: #555; }
 
-.wip-menu { z-index: 100 !important; position: absolute; top: 100%; margin-top: 5px; min-width: 160px; right: 0; left: auto; transform: none; }
-.column .wip-menu { left: auto !important; right: 0 !important; }
-.column:last-child .wip-menu { left: auto !important; right: 0 !important; transform: none !important; }
-@media (max-width: 1400px) { .column .wip-menu { left: 0 !important; right: auto !important; } }
-.column-controls { position: relative; }
-.column { position: relative; overflow: visible; }
-.board-columns { overflow: visible; }
+/* Меню настроек колонки */
+.wip-menu {z-index: 100 !important; position: absolute; top: 100%; margin-top: 5px;min-width: 160px; right: 0; left: auto; transform: none; }
+/* По умолчанию меню справа от кнопки */
+.column .wip-menu {left: auto !important; right: 0 !important;}
+/* Для последней колонки - меню слева от кнопки */
+.column:last-child .wip-menu { left: auto !important; right: 0 !important; transform: none !important;}
+/* Дополнительная страховка для узких экранов */
+@media (max-width: 1400px) {
+    .column .wip-menu {left: 0 !important; right: auto !important;}
+}
+/* Чтобы меню не вылезало за пределы */
+.column-controls {position: relative;}
+.column {position: relative; overflow: visible;}
+.board-columns {overflow: visible;}
 
+/* Поиск */
 .search-container { display: flex; align-items: center; margin-right: 20px; background-color: transparent; position: relative; }
+.progress-container { display: flex; align-items: center; gap: 8px; margin-right: 20px; background-color: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 20px; padding: 6px 12px; position: relative; }
+.progress-bar-track { width: 140px; height: 8px; background-color: #e0e0e0; border-radius: 10px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background-color: #4a90e2; border-radius: 10px; transition: width 0.3s ease; }
+.progress-bar-label { font-size: 12px; font-weight: 600; color: #555; min-width: 32px; text-align: right; }
+.progress-settings-btn { background: transparent; border: none; cursor: pointer; font-size: 13px; padding: 0; line-height: 1; opacity: 0.6; transition: opacity 0.15s; }
+.progress-settings-btn:hover { opacity: 1; }
+.progress-settings-dropdown { width: 260px; }
+.progress-columns-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; max-height: 160px; overflow-y: auto; }
+.progress-columns-list label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #333; cursor: pointer; font-weight: normal; }
+.progress-columns-list input[type="checkbox"] { width: auto; margin: 0; }
 .search-input-box { display: flex; align-items: center; background-color: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 20px; overflow: hidden; }
-.search-input { border: none; background: transparent; padding: 8px 12px; outline: none; font-size: 13px; width: 360px; }
+.search-input { border: none; background: transparent; padding: 8px 12px; outline: none; font-size: 13px; width: 260px; }
 .search-btn { background: transparent; border: none; padding: 8px 12px; cursor: pointer; color: #999; }
 .search-btn:hover { color: #666; }
 .search-dropdown { top: 45px; left: 0; right: auto; width: 100%; max-height: 400px; overflow-y: auto; padding: 0; border-radius: 12px; }
@@ -41,6 +59,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .dropdown-menu input[type="text"], .dropdown-menu input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff; outline: none; font-size: 13px; margin-bottom: 6px; }
 .dropdown-menu button { width: 100%; padding: 8px; background-color: #7a4aae; color: white; border: 2px solid #d4b8e8; cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 20px; margin: 3px 0; }
 .dropdown-menu button:hover { background-color: #6a3a9e; border-color: #c8a8e0; }
+
 .dropdown-btn.text-red { background-color: #dc3545; border-color: #f5c2c2 !important; color: white; }
 .delete-board-btn { display: none; margin-top: 8px; }
 .user-no-board-msg { padding: 15px; text-align: center; color: #999; font-size: 13px; }
@@ -198,8 +217,8 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .wip-name-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .wip-name-group input { width: 100%; height: 32px; border: 1px solid #ddd; padding: 0 8px; box-sizing: border-box; border-radius: 8px; }
 .wip-name-group input:focus { border-color: #d4b8e8; outline: none; }
-.btn-apply-rename { background-color: #f5f5f5 !important; color: #666; border: 1px solid #ddd; cursor: pointer; font-weight: 500; height: 32px; width: 100%; border-radius: 8px; font-size: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-.btn-apply-rename:hover { background-color: #e0e0e0 !important; color: #333; }
+.btn-apply-rename { background-color: #7a4aae; color: white; border: 2px solid #d4b8e8; cursor: pointer; font-weight: 500; height: 32px; width: 100%; border-radius: 8px; font-size: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.btn-apply-rename:hover { background-color: #6a3a9e; border-color: #c8a8e0; }
 
 .auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .auth-box { background-color: #ffffff; border-radius: 24px; padding: 40px; width: 360px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
@@ -235,8 +254,8 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 
 .btn-save { background-color: #7a4aae; color: white; border: 2px solid #d4b8e8; padding: 10px 28px; font-size: 14px; cursor: pointer; border-radius: 40px; font-weight: 500; transition: all 0.2s; }
 .btn-save:hover { background-color: #6a3a9e; border-color: #c8a8e0; transform: translateY(-1px); }
-.btn-archive, .btn-backlog { background: #f5f5f5; color: #666; border: 2px solid #d4d9e0; padding: 8px 16px; cursor: pointer; border-radius: 40px; font-size: 12px; font-weight: 500; transition: all 0.2s; }
-.btn-archive:hover, .btn-backlog:hover { background: #e0e0e0; border-color: #c5d9f0; }
+.btn-archive, .btn-backlog, .btn-delete-task { background: #f5f5f5; color: #666; border: 2px solid #d4d9e0; padding: 8px 16px; cursor: pointer; border-radius: 40px; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+.btn-archive:hover, .btn-backlog:hover, .btn-delete-task:hover { background: #e0e0e0; border-color: #c5d9f0; }
 .btn-restore { background: #7a4aae; color: white; border: 2px solid #d4b8e8; padding: 8px 16px; cursor: pointer; border-radius: 40px; font-size: 12px; font-weight: 500; transition: all 0.2s; }
 .btn-restore:hover { background: #6a3a9e; border-color: #c8a8e0; }
 
@@ -346,11 +365,12 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 body.global-scroll-mode .board-columns { display: flex !important; gap: 20px; align-items: stretch !important; height: auto !important; min-height: auto !important; margin: 10px 45px 20px 45px; width: 100% !important; }
 body.global-scroll-mode .column { flex: 1 1 0 !important; height: auto !important; max-height: none !important; min-height: 100px !important; display: flex !important; flex-direction: column !important; }
 body.global-scroll-mode .cards-dropzone { flex: 1 !important; overflow-y: auto !important; min-height: 50px !important; }
-body.global-scroll-mode .column-header { position: sticky !important; top: 0; z-index: 15; flex-shrink: 0 !important; }
+body.global-scroll-mode .column-header { position: sticky !important; top: 0; z-index: 15; flex-shrink: 0 !important; background: inherit !important; border-radius: 12px 12px 0 0 !important; margin: -12px -12px 12px -12px !important; padding: 12px 12px 8px 12px !important; }
 body.global-scroll-mode .board-columns-wrapper { height: auto !important; min-height: auto !important; flex-grow: 0 !important; }
-body.global-scroll-mode .view-container { height: auto !important; min-height: auto !important; }
-body.global-scroll-mode .board-content { height: auto !important; min-height: auto !important; }
+body.global-scroll-mode .view-container { overflow-y: auto !important; height: calc(100vh - 85px) !important; max-height: calc(100vh - 85px) !important; }
+body.global-scroll-mode .board-content { height: auto !important; min-height: 100% !important; padding-bottom: 20px !important; }
 body.global-scroll-mode .side-dropzone { height: 100vh; flex-grow: 1; }
+body.global-scroll-mode .column .cards-dropzone { overflow-y: visible !important; }
 
 .column:hover, .column:focus-within, .column:has(.wip-menu:not([style*="display: none"])) { z-index: 15 !important; }
 
@@ -374,8 +394,8 @@ div#checkpoints-list { max-height: 83px; overflow-y: auto; padding-right: 5px; }
 .dropdown-btn.text-red:hover { background: #cc6a7a !important; border-color: #e8b8c4 !important; }
 button[onclick*="logout"] { background: #d97a8a !important; border-color: #f0c8d0 !important; color: #ffffff !important; box-shadow: none !important; }
 button[onclick*="logout"]:hover { background: #cc6a7a !important; border-color: #e8b8c4 !important; }
-.btn-archive, .btn-backlog { background: #d97a8a !important; border-color: #f0c8d0 !important; color: #ffffff !important; box-shadow: none !important; }
-.btn-archive:hover, .btn-backlog:hover { background: #cc6a7a !important; border-color: #e8b8c4 !important; }
+.btn-archive, .btn-backlog, .btn-delete-task { background: #d97a8a !important; border-color: #f0c8d0 !important; color: #ffffff !important; box-shadow: none !important; }
+.btn-archive:hover, .btn-backlog:hover, .btn-delete-task:hover { background: #cc6a7a !important; border-color: #e8b8c4 !important; }
 button[onclick*="clearArchive"] { background: #d97a8a !important; border-color: #f0c8d0 !important; color: #ffffff !important; box-shadow: none !important; }
 button[onclick*="clearArchive"]:hover { background: #cc6a7a !important; border-color: #e8b8c4 !important; }
 .member-item button { background: transparent !important; color: #d97a8a !important; border: none !important; box-shadow: none !important; font-size: 18px !important; transition: all 0.2s ease !important; }
@@ -411,8 +431,18 @@ button[onclick*="clearArchive"]:hover { background: #cc6a7a !important; border-c
 body.mentor-mode .toolbar > .chat-toggle-btn {display: none !important;}
 
 /* для наставника при общем скролле */
-body.global-scroll-mode .mentor-footer {position: sticky; bottom: 20px; margin-top: auto; background: #faf5ff; border-radius: 12px 12px 0 0; z-index: 9999;padding: 8px 20px 8px 0; border-top: 1px solid #e8d5f0;}
+body.global-scroll-mode .mentor-footer { position: sticky !important; bottom: 0 !important; margin-top: auto !important; background: #faf5ff !important; z-index: 20 !important; padding: 8px 20px 8px 0 !important; border-top: 1px solid #e8d5f0 !important; }
 body.global-scroll-mode .board-content {padding-bottom: 0;}
 body.global-scroll-mode .board-columns-wrapper {flex: 1; min-height: 0;}
 body.global-scroll-mode .board-columns {height: auto !important; min-height: 300px !important;}
 body.global-scroll-mode .column {height: auto !important; max-height: none !important; min-height: 200px !important;}
+/* Кнопка удаления карточки */
+.card-delete-btn { display: none; position: absolute; top: 6px; right: 8px; background: none; border: none; color: #cc0000; font-size: 13px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0.7; transition: opacity 0.15s; }
+.task-card:hover .card-delete-btn { display: inline-block; }
+.card-delete-btn:hover { opacity: 1; color: #dc3545; }
+
+/* Кнопка удаления колонки */
+.col-delete-btn { background: none !important; border: none !important; color: #cc6677 !important; font-size: 15px !important; cursor: pointer; padding: 2px 4px !important; opacity: 0.6; transition: opacity 0.15s; box-shadow: none !important; width: auto !important; margin: 0 !important; border-radius: 6px !important; }
+.col-delete-btn:hover { opacity: 1; color: #dc3545 !important; background: rgba(220,53,69,0.08) !important; }
+
+.sidebar-logo { display: none !important; }
