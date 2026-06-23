@@ -55,6 +55,8 @@ def init_db():
         db.execute("ALTER TABLE boards ADD COLUMN progress_done_columns TEXT DEFAULT ''")
     if not has_column("users", "role"):
         db.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'student'")
+    if not has_column("board_members", "role"):
+        db.execute("ALTER TABLE board_members ADD COLUMN role TEXT DEFAULT 'student'")
 
     if not has_column("boards", "columns_data"):
         db.execute("ALTER TABLE boards ADD COLUMN columns_data TEXT")
