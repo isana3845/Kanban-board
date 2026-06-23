@@ -57,7 +57,7 @@ body, html { height: 100%; background-color: #ffffff; overflow: hidden; margin: 
 .search-result-item:last-child { border-bottom: none; }
 
 .dropdown-menu input[type="text"], .dropdown-menu input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff; outline: none; font-size: 13px; margin-bottom: 6px; }
-.dropdown-menu button { width: 100%; padding: 8px; background-color: #7a4aae; color: #7a4aae; border: 2px solid #d4b8e8; cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 20px; margin: 3px 0; }
+.dropdown-menu button { width: 100%; padding: 8px; background-color: #7a4aae; color: white; border: 2px solid #d4b8e8; cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 20px; margin: 3px 0; }
 .dropdown-menu button:hover { background-color: #6a3a9e; border-color: #c8a8e0; }
 
 .dropdown-btn.text-red { background-color: #dc3545; border-color: #f5c2c2 !important; color: white; }
